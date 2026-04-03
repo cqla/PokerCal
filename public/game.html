@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>PokerCal - Game</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/table.css">
+  <link rel="stylesheet" href="/css/cards.css">
+</head>
+<body>
+  <div class="game-container">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <a href="/" class="logo-sm">PokerCal</a>
+        <span class="room-code" id="room-code"></span>
+        <button class="btn btn-sm copy-btn" id="copy-code-btn" title="Copy room code">Copy</button>
+      </div>
+      <div class="top-bar-right">
+        <span class="blind-info" id="blind-info"></span>
+        <span class="host-badge" id="host-badge" style="display:none;">HOST</span>
+        <button class="btn btn-sm btn-settings" id="settings-btn">Settings</button>
+      </div>
+    </div>
+
+    <!-- Pending Joins Banner (Host Only) - floats top-left, not blocked by side panel -->
+    <div class="pending-joins-bar" id="pending-joins-bar" style="display:none;">
+      <div class="pending-joins-list" id="pending-joins-list"></div>
+    </div>
+
+    <!-- Waiting for Approval Overlay -->
+    <div class="waiting-approval-overlay" id="waiting-approval" style="display:none;">
+      <div class="waiting-approval-box">
+        <div class="waiting-spinner"></div>
+        <h3>Waiting for host approval...</h3>
+        <p>The host will approve your request to join.</p>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal" style="display:none;">
+      <div class="modal">
+        <h3>Game Settings</h3>
+        <div id="settings-host-section">
+          <div class="form-group">
+            <label>Game Mode</label>
+            <select id="set-game-mode" class="game-mode-select">
+              <option value="nlh">No Limit Hold'em</option>
+              <option value="plo5">Pot Limit Omaha 5</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Small Blind</label>
+            <input type="number" id="set-sb" min="1">
+          </div>
+          <div class="form-group">
+            <label>Big Blind</label>
+            <input type="number" id="set-bb" min="2">
+          </div>
+          <div class="form-group">
+            <label>Starting Chips (for new players)</label>
+            <input type="number" id="set-chips" min="100" step="100">
+          </div>
+          <div class="form-group">
+            <label>Turn Timer (seconds)</label>
+            <input type="number" id="set-turn-timer" min="10" max="300" step="5">
+          </div>
+          <div class="form-group">
+            <label>Time Bank Per Player (seconds)</label>
+            <input type="number" id="set-time-bank" min="0" max="600" step="30">
+          </div>
+
+          <div class="settings-divider"></div>
+          <h4 class="settings-subtitle">Special Features</h4>
+
+          <div class="form-group form-toggle">
+            <label>
+              <input type="checkbox" id="set-rabbit-hunting">
+              Rabbit Hunting
+            </label>
+            <span class="setting-desc">Show what cards would have come after a fold-out</span>
+          </div>
+
+          <div class="form-group form-toggle">
+            <label>
+              <input type="checkbox" id="set-run-it-twice">
+              Run It Twice
+            </label>
+            <span class="setting-desc">All-in players can choose to deal remaining cards twice</span>
+          </div>
+
+          <div class="form-group form-toggle">
+            <label>
+              <input type="checkbox" id="set-seven-two-bounty">
+              7-2 Bounty
+            </label>
+            <span class="setting-desc">Win with 7-2 offsuit and everyone pays you a bounty</span>
+          </div>
+          <div class="form-group form-indent" id="seven-two-amount-group" style="display:none;">
+            <label>Bounty Amount (0 = Big Blind)</label>
+            <input type="number" id="set-seven-two-amount" min="0" step="10" value="0">
+          </div>
+
+          <div class="form-group form-toggle">
+            <label>
+              <input type="checkbox" id="set-bomb-pot">
+              Bomb Pots
+            </label>
+            <span class="setting-desc">All players ante and flop is dealt immediately</span>
+          </div>
+          <div class="form-group form-indent" id="bomb-pot-options" style="display:none;">
+            <label>Ante Amount (0 = Big Blind)</label>
+            <input type="number" id="set-bomb-pot-ante" min="0" step="10" value="0">
+            <label>Every N Hands (0 = Manual Only)</label>
+            <input type="number" id="set-bomb-pot-freq" min="0" max="50" step="1" value="5">
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn btn-sm btn-primary" id="save-settings">Save</button>
+            <button class="btn btn-sm" id="close-settings" style="background:var(--border-color);">Cancel</button>
+          </div>
+
+          <!-- Player Chip Management -->
+          <div class="settings-divider"></div>
+          <h4 class="settings-subtitle">Player Chips</h4>
+          <div class="player-chips-list" id="player-chips-list"></div>
+
+          <!-- Give Time Bank to All Players -->
+          <div class="settings-divider"></div>
+          <h4 class="settings-subtitle">Time Bank</h4>
+          <div class="give-time-bank-row">
+            <label>Add time to all players:</label>
+            <div class="give-time-bank-controls">
+              <button class="btn btn-sm give-time-btn" id="give-time-15" data-amount="15">+15s</button>
+              <button class="btn btn-sm give-time-btn" id="give-time-30" data-amount="30">+30s</button>
+              <button class="btn btn-sm give-time-btn" id="give-time-60" data-amount="60">+60s</button>
+            </div>
+          </div>
+        </div>
+        <div id="settings-viewer-section" style="display:none;">
+          <p class="settings-readonly-note">Only the host can change settings.</p>
+          <div class="settings-info">
+            <div>Game Mode: <strong id="view-mode"></strong></div>
+            <div>Small Blind: <strong id="view-sb"></strong></div>
+            <div>Big Blind: <strong id="view-bb"></strong></div>
+            <div>Starting Chips: <strong id="view-chips"></strong></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-sm" id="close-settings-viewer" style="background:var(--border-color);">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Poker Table Area -->
+    <div class="table-area">
+      <div class="table-felt" id="table-felt">
+        <!-- Seats rendered by JS -->
+        <div class="seat-positions" id="seat-positions"></div>
+
+        <!-- Community Cards -->
+        <div class="community-area">
+          <div class="community-cards" id="community-cards"></div>
+          <div class="pot-display" id="pot-display"></div>
+        </div>
+
+        <!-- Dealer button -->
+        <div class="dealer-btn-marker" id="dealer-marker" style="display:none;">D</div>
+      </div>
+    </div>
+
+    <!-- Player's own cards (larger display at bottom) -->
+    <div class="my-cards-area" id="my-cards-area" style="display:none;">
+      <div class="my-cards" id="my-cards"></div>
+      <div class="my-hand-strength" id="my-hand-strength"></div>
+    </div>
+
+    <!-- Hand Result Overlay -->
+    <div class="hand-result" id="hand-result" style="display:none;">
+      <div class="hand-result-content" id="hand-result-content"></div>
+    </div>
+
+    <!-- Rabbit Cards Display -->
+    <div class="rabbit-cards-area" id="rabbit-cards-area" style="display:none;">
+      <span class="rabbit-label">🐇 Rabbit:</span>
+      <div class="rabbit-cards" id="rabbit-cards"></div>
+    </div>
+
+    <!-- Run It Twice Prompt -->
+    <div class="run-it-twice-prompt" id="rit-prompt" style="display:none;">
+      <div class="rit-prompt-box">
+        <h4>Run It Twice?</h4>
+        <p>All-in — deal remaining cards twice, split pot by board.</p>
+        <div class="rit-equities" id="rit-equities"></div>
+        <div class="rit-buttons">
+          <button class="btn btn-sm rit-agree-btn" id="rit-agree-btn">Run It Twice</button>
+          <button class="btn btn-sm rit-decline-btn" id="rit-decline-btn">Run It Once</button>
+        </div>
+        <div class="rit-waiting" id="rit-waiting" style="display:none;">Waiting for other players...</div>
+      </div>
+    </div>
+
+    <!-- Run It Twice Results -->
+    <div class="rit-results" id="rit-results" style="display:none;">
+      <div class="rit-board" id="rit-board-1">
+        <div class="rit-board-label">Board 1</div>
+        <div class="rit-board-cards" id="rit-cards-1"></div>
+        <div class="rit-board-winner" id="rit-winner-1"></div>
+      </div>
+      <div class="rit-board" id="rit-board-2">
+        <div class="rit-board-label">Board 2</div>
+        <div class="rit-board-cards" id="rit-cards-2"></div>
+        <div class="rit-board-winner" id="rit-winner-2"></div>
+      </div>
+    </div>
+
+    <!-- 7-2 Bounty Banner -->
+    <div class="seven-two-banner" id="seven-two-banner" style="display:none;">
+      <span class="seven-two-text" id="seven-two-text"></span>
+    </div>
+
+    <!-- Turn Timer Bar -->
+    <div class="turn-timer-bar" id="turn-timer-bar" style="display:none;">
+      <div class="turn-timer-fill" id="turn-timer-fill"></div>
+      <span class="turn-timer-text" id="turn-timer-text"></span>
+    </div>
+
+    <!-- Action Controls -->
+    <div class="controls-area" id="controls-area" style="display:none;">
+      <div class="bet-presets" id="bet-presets">
+        <button class="preset-btn" data-preset="min">Min</button>
+        <button class="preset-btn" data-preset="0.5">1/2 Pot</button>
+        <button class="preset-btn" data-preset="0.75">3/4 Pot</button>
+        <button class="preset-btn" data-preset="1">Pot</button>
+        <button class="preset-btn" data-preset="max">Max</button>
+      </div>
+      <div class="bet-slider-row" id="bet-slider-row" style="display:none;">
+        <span class="slider-label slider-min" id="slider-min-label"></span>
+        <input type="range" class="bet-slider" id="bet-slider" min="0" max="1000" value="0">
+        <span class="slider-label slider-max" id="slider-max-label"></span>
+      </div>
+      <div class="bet-amount-display" id="bet-amount-display" style="display:none;">
+        <span>Raise to: </span>
+        <input type="number" class="bet-input" id="bet-input" min="0">
+      </div>
+      <div class="action-buttons">
+        <button class="btn action-btn fold-btn" id="fold-btn">Fold</button>
+        <button class="btn action-btn check-btn" id="check-btn">Check</button>
+        <button class="btn action-btn call-btn" id="call-btn" style="display:none;">Call</button>
+        <button class="btn action-btn raise-btn" id="raise-btn">Raise</button>
+        <button class="btn action-btn allin-btn" id="allin-btn">All In</button>
+      </div>
+      <div class="time-bank-row" id="time-bank-row" style="display:none;">
+        <button class="btn btn-sm time-bank-btn" id="time-bank-btn">Use Time Bank</button>
+        <span class="time-bank-remaining" id="time-bank-remaining"></span>
+      </div>
+    </div>
+
+    <!-- Host Controls (always visible when applicable, independent of game phase) -->
+    <div class="host-controls" id="host-controls" style="display:none;">
+      <button class="btn btn-sm host-pause-btn" id="pause-btn" style="display:none;">Pause</button>
+      <button class="btn btn-sm host-resume-btn" id="resume-btn" style="display:none;">Resume</button>
+      <button class="btn btn-sm host-stop-btn" id="stop-btn" style="display:none;">Stop Game</button>
+      <button class="btn btn-sm bomb-pot-btn" id="bomb-pot-btn" style="display:none;">Bomb Pot</button>
+    </div>
+
+    <!-- Start / Waiting Controls -->
+    <div class="waiting-controls" id="waiting-controls" style="display:none;">
+      <button class="btn btn-primary" id="start-btn">Deal Cards</button>
+      <button class="btn btn-secondary" id="rebuy-btn" style="display:none;">Rebuy</button>
+      <button class="btn btn-sm cash-out-btn" id="cash-out-btn" style="display:none;">Cash Out</button>
+      <button class="btn btn-sm show-cards-btn" id="show-cards-btn" style="display:none;">Show Cards</button>
+    </div>
+
+    <!-- Side Panel (collapsible) -->
+    <div class="side-panel" id="side-panel">
+      <div class="panel-collapse-bar">
+        <button class="panel-collapse-btn" id="panel-collapse-btn" title="Collapse panel">&rsaquo;</button>
+      </div>
+      <div class="panel-tabs">
+        <button class="panel-tab active" data-tab="chat">Chat</button>
+        <button class="panel-tab" data-tab="log">Log</button>
+        <button class="panel-tab" data-tab="ledger">Ledger</button>
+      </div>
+      <div class="panel-content" id="panel-chat">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Type a message..." maxlength="500" autocomplete="off">
+          <button class="btn btn-sm btn-primary" id="chat-send">Send</button>
+        </div>
+      </div>
+      <div class="panel-content" id="panel-log" style="display:none;">
+        <div class="log-messages" id="log-messages"></div>
+      </div>
+      <div class="panel-content" id="panel-ledger" style="display:none;">
+        <div class="ledger-content" id="ledger-content"></div>
+      </div>
+    </div>
+
+    <!-- Panel Toggle (collapsed/mobile) -->
+    <button class="panel-toggle" id="panel-toggle">Chat</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/card-renderer.js"></script>
+  <script src="/js/table-renderer.js"></script>
+  <script src="/js/controls.js"></script>
+  <script src="/js/chat.js"></script>
+  <script src="/js/game.js"></script>
+</body>
+</html>

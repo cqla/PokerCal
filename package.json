@@ -1,0 +1,19 @@
+{
+  "name": "pokercal",
+  "version": "1.0.0",
+  "description": "PokerCal - Online poker with friends",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "playwright": "^1.59.1",
+    "socket.io": "^2.5.0"
+  },
+  "devDependencies": {
+    "jest": "^27.5.1"
+  }
+}

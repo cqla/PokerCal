@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokerCal - Play Poker with Friends</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/lobby.css">
+</head>
+<body>
+  <div class="lobby-container">
+    <div class="lobby-header">
+      <h1 class="logo">PokerCal</h1>
+      <p class="tagline">Play Texas Hold'em with friends</p>
+    </div>
+
+    <div class="lobby-content">
+      <div class="lobby-card" id="create-section">
+        <h2>Create Game</h2>
+        <div class="form-group">
+          <label>Your Name</label>
+          <input type="text" id="create-name" placeholder="Enter your name" maxlength="20" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Small Blind</label>
+          <input type="number" id="small-blind" value="10" min="1">
+        </div>
+        <div class="form-group">
+          <label>Big Blind</label>
+          <input type="number" id="big-blind" value="20" min="2">
+        </div>
+        <div class="form-group">
+          <label>Starting Chips</label>
+          <input type="number" id="starting-chips" value="1000" min="100" step="100">
+        </div>
+        <div class="form-group">
+          <label>Game Mode</label>
+          <select id="game-mode" class="game-mode-select">
+            <option value="nlh">No Limit Hold'em</option>
+            <option value="plo5">Pot Limit Omaha 5</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="create-btn">Create Table</button>
+      </div>
+
+      <div class="divider">
+        <span>OR</span>
+      </div>
+
+      <div class="lobby-card" id="join-section">
+        <h2>Join Game</h2>
+        <div class="form-group">
+          <label>Your Name</label>
+          <input type="text" id="join-name" placeholder="Enter your name" maxlength="20" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Room Code</label>
+          <input type="text" id="room-code" placeholder="Enter room code" maxlength="6" autocomplete="off" style="text-transform: uppercase;">
+        </div>
+        <button class="btn btn-secondary" id="join-btn">Join Table</button>
+      </div>
+    </div>
+
+    <div class="error-message" id="error-msg" style="display: none;"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/lobby.js"></script>
+</body>
+</html>
