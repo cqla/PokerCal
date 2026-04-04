@@ -49,7 +49,10 @@
       "Bash(npx playwright:*)",
       "Bash(node tests/e2e-disconnect.js)",
       "Bash(node -c src/socket/socketHandler.js)",
-      "Bash(node -c public/js/game.js)"
+      "Bash(node -c public/js/game.js)",
+      "Bash(wc -l /c/Users/coolz/Documents/\"My Web Sites\"/PokerCal/public/css/*.css)",
+      "Bash(find '/c/Users/coolz/Documents/My Web Sites/PokerCal' -name .env* -o -name *.env)",
+      "WebFetch(domain:sharpai.bet)"
     ]
   }
 }
