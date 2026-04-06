@@ -9,6 +9,15 @@
   var lastHandNumber = 0;
   var timerInterval = null;
   var lastSevenTwoWinner = null;
+  var lastCommunityCount = 0;
+  var lastPhase = null;
+  var wasMyTurn = false;
+  var timerWarnedAt = 0; // track which second we last warned at
+
+  // Pre-action queue
+  var queuedAction = null; // null, 'checkfold', 'call', or 'fold'
+  var queuedCallAmount = null; // the toCall amount when call was queued
+  var queuedHighestBet = null; // track the bet level when action was queued
 
   // If no player name, prompt for one
   if (!playerName) {
@@ -23,7 +32,14 @@
   // Initialize modules
   Chat.init(socket);
   Controls.init(function(action, amount) {
+    clearQueue();
     socket.emit('player-action', { action: action, amount: amount });
+    // Play sound for own action
+    if (action === 'fold') Sounds.fold();
+    else if (action === 'check') Sounds.check();
+    else if (action === 'call') Sounds.call();
+    else if (action === 'raise') Sounds.raise();
+    else if (action === 'allin') Sounds.allIn();
   });
 
   // Join the room
@@ -97,6 +113,75 @@
         isSeated = true;
         break;
       }
+    }
+
+    // === Sound effects for game events ===
+
+    // New hand started
+    if (state.phase === 'preflop' && lastPhase === 'waiting') {
+      Sounds.newHand();
+    }
+
+    // Community cards dealt (flop/turn/river)
+    var ccCount = state.communityCards ? state.communityCards.length : 0;
+    if (ccCount > lastCommunityCount && ccCount > 0) {
+      Sounds.communityCard();
+    }
+    lastCommunityCount = ccCount;
+    if (state.phase === 'waiting') lastCommunityCount = 0;
+
+    // Other player actions — detect via lastAction changes
+    if (lastState && state.currentPlayerId !== (lastState.currentPlayerId)) {
+      // Action happened, find who acted (the previous current player)
+      if (lastState.currentPlayerIndex >= 0 && lastState.currentPlayerIndex < state.players.length) {
+        var actedPlayer = state.players[lastState.currentPlayerIndex];
+        if (actedPlayer && !actedPlayer.isYou && actedPlayer.lastAction) {
+          var act = actedPlayer.lastAction.toLowerCase();
+          if (act.indexOf('fold') === 0) Sounds.fold();
+          else if (act.indexOf('check') === 0) Sounds.check();
+          else if (act.indexOf('call') === 0) Sounds.call();
+          else if (act.indexOf('raise') === 0) Sounds.raise();
+          else if (act.indexOf('all-in') === 0 || act.indexOf('all in') === 0) Sounds.allIn();
+        }
+      }
+    }
+
+    // It's now my turn
+    var isMyTurn = state.validActions && state.currentPlayerId === myId;
+    if (isMyTurn && !wasMyTurn) {
+      Sounds.yourTurn();
+    }
+    wasMyTurn = isMyTurn;
+
+    // Hand ended — win sound
+    if (state.phase === 'waiting' && lastState && lastState.phase !== 'waiting') {
+      if (state.lastHandResults) {
+        // Check if we won
+        for (var r = 0; r < state.lastHandResults.length; r++) {
+          var winners = state.lastHandResults[r].winners;
+          for (var w = 0; w < winners.length; w++) {
+            if (winners[w].id === myId) {
+              Sounds.win();
+              r = state.lastHandResults.length; // break outer
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    lastPhase = state.phase;
+
+    // === Pre-action queue ===
+    // Clear call queue if someone raised (toCall amount changed)
+    if (queuedAction === 'call' && isMyTurn && state.validActions) {
+      if (state.validActions.toCall !== queuedCallAmount) {
+        clearQueue(); // Raise happened — don't auto-call the new amount
+      }
+    }
+    // Execute queued action if it's now my turn
+    if (isMyTurn && queuedAction) {
+      executeQueuedAction(state);
     }
 
     // Show hand results when a new hand ends
@@ -177,6 +262,14 @@
       }
 
       text.textContent = currentName + ' - ' + remaining + 's';
+
+      // Timer warning sound at 10s and 5s (only for current player's own turn)
+      if (state.currentPlayerId === myId && remaining <= 10 && remaining > 0 && remaining !== timerWarnedAt) {
+        if (remaining === 10 || remaining === 5) {
+          Sounds.timerWarning();
+        }
+        timerWarnedAt = remaining;
+      }
 
       // Enable time bank button when ≤10 seconds remain
       var tbBtn = document.getElementById('time-bank-btn');
@@ -329,6 +422,23 @@
       stopBtn.style.display = 'none';
     }
 
+    // Pre-action queue buttons — show when not your turn but in an active hand
+    var preactionArea = document.getElementById('preaction-area');
+    var isInHand = myPlayer && !myPlayer.isFolded && !myPlayer.isAllIn && !myPlayer.isSittingOut && myPlayer.hasCards;
+    var isActiveBetting = state.phase !== 'waiting' && state.phase !== 'showdown' && state.currentPlayerIndex >= 0;
+    var showPreaction = isSeated && isActiveBetting && isInHand && state.currentPlayerId !== myId;
+
+    if (showPreaction) {
+      preactionArea.style.display = 'flex';
+      updatePreactionButtons(state);
+    } else {
+      preactionArea.style.display = 'none';
+      // Clear queue when hand ends or it becomes your turn
+      if (!isActiveBetting || !isInHand) {
+        clearQueue();
+      }
+    }
+
     // Bomb pot button — host can call it any time when bomb pots are enabled
     if (state.isHost && state.settings.bombPotEnabled && !state.isBombPot) {
       hostControls.style.display = 'flex';
@@ -337,6 +447,92 @@
       bombPotBtn.style.display = 'none';
     }
 
+  }
+
+  // ==================== Pre-Action Queue ====================
+
+  function clearQueue() {
+    queuedAction = null;
+    queuedCallAmount = null;
+    queuedHighestBet = null;
+    updatePreactionHighlight();
+  }
+
+  function setQueue(action, callAmount) {
+    if (queuedAction === action) {
+      // Toggle off
+      clearQueue();
+      return;
+    }
+    queuedAction = action;
+    queuedCallAmount = callAmount || null;
+    updatePreactionHighlight();
+  }
+
+  function updatePreactionHighlight() {
+    var checkfoldBtn = document.getElementById('preaction-checkfold');
+    var callBtn = document.getElementById('preaction-call');
+    var foldBtn = document.getElementById('preaction-fold');
+    if (checkfoldBtn) checkfoldBtn.classList.toggle('preaction-active', queuedAction === 'checkfold');
+    if (callBtn) callBtn.classList.toggle('preaction-active', queuedAction === 'call');
+    if (foldBtn) foldBtn.classList.toggle('preaction-active', queuedAction === 'fold');
+  }
+
+  function updatePreactionButtons(state) {
+    var callBtn = document.getElementById('preaction-call');
+    // Update the call button text with current call amount
+    // Find current highest bet to estimate what calling would cost
+    if (state.players && myId) {
+      var myP = null;
+      for (var i = 0; i < state.players.length; i++) {
+        if (state.players[i].isYou) { myP = state.players[i]; break; }
+      }
+      if (myP) {
+        // Estimate call amount from what we can see
+        var highestBet = 0;
+        for (var i = 0; i < state.players.length; i++) {
+          if (state.players[i].currentBet > highestBet) {
+            highestBet = state.players[i].currentBet;
+          }
+        }
+        var toCall = highestBet - (myP.currentBet || 0);
+        if (toCall > 0) {
+          callBtn.textContent = 'Call ' + TableRenderer.formatChips(toCall);
+          callBtn.style.display = '';
+        } else {
+          callBtn.style.display = 'none';
+          // If we had call queued but there's nothing to call, clear it
+          if (queuedAction === 'call') clearQueue();
+        }
+      }
+    }
+    updatePreactionHighlight();
+  }
+
+  function executeQueuedAction(state) {
+    if (!state.validActions) { clearQueue(); return; }
+    var actions = state.validActions.actions;
+    var action = queuedAction;
+    clearQueue();
+
+    if (action === 'checkfold') {
+      if (actions.indexOf('check') >= 0) {
+        socket.emit('player-action', { action: 'check' });
+        Sounds.check();
+      } else {
+        socket.emit('player-action', { action: 'fold' });
+        Sounds.fold();
+      }
+    } else if (action === 'call') {
+      if (actions.indexOf('call') >= 0) {
+        socket.emit('player-action', { action: 'call' });
+        Sounds.call();
+      }
+      // If call is no longer valid (raise happened), queue was already cleared
+    } else if (action === 'fold') {
+      socket.emit('player-action', { action: 'fold' });
+      Sounds.fold();
+    }
   }
 
   // ==================== UI Handlers ====================
@@ -412,6 +608,41 @@
   document.getElementById('time-bank-btn').addEventListener('click', function() {
     socket.emit('use-time-bank');
   });
+
+  // Pre-action queue buttons
+  document.getElementById('preaction-checkfold').addEventListener('click', function() {
+    setQueue('checkfold');
+  });
+
+  document.getElementById('preaction-call').addEventListener('click', function() {
+    // Store the estimated call amount so we can detect raises
+    var callAmount = null;
+    if (lastState && lastState.players) {
+      var highestBet = 0;
+      var myBet = 0;
+      for (var i = 0; i < lastState.players.length; i++) {
+        if (lastState.players[i].currentBet > highestBet) highestBet = lastState.players[i].currentBet;
+        if (lastState.players[i].isYou) myBet = lastState.players[i].currentBet || 0;
+      }
+      callAmount = highestBet - myBet;
+    }
+    setQueue('call', callAmount);
+  });
+
+  document.getElementById('preaction-fold').addEventListener('click', function() {
+    setQueue('fold');
+  });
+
+  // Mute toggle
+  document.getElementById('mute-btn').addEventListener('click', function() {
+    var isMuted = Sounds.toggleMute();
+    this.textContent = isMuted ? 'Sound: OFF' : 'Sound: ON';
+  });
+  // Set initial mute button state
+  (function() {
+    var muteBtn = document.getElementById('mute-btn');
+    if (Sounds.isMuted()) muteBtn.textContent = 'Sound: OFF';
+  })();
 
   // Copy room code
   document.getElementById('copy-code-btn').addEventListener('click', function() {

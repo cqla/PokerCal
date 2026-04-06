@@ -20,6 +20,7 @@
       <div class="top-bar-right">
         <span class="blind-info" id="blind-info"></span>
         <span class="host-badge" id="host-badge" style="display:none;">HOST</span>
+        <button class="btn btn-sm btn-mute" id="mute-btn" title="Toggle sound">Sound: ON</button>
         <button class="btn btn-sm btn-settings" id="settings-btn">Settings</button>
       </div>
     </div>
@@ -265,6 +266,15 @@
       <button class="btn btn-sm bomb-pot-btn" id="bomb-pot-btn" style="display:none;">Bomb Pot</button>
     </div>
 
+    <!-- Pre-Action Queue (when not your turn) -->
+    <div class="preaction-area" id="preaction-area" style="display:none;">
+      <div class="preaction-buttons">
+        <button class="btn preaction-btn preaction-checkfold" id="preaction-checkfold">Check/Fold</button>
+        <button class="btn preaction-btn preaction-call" id="preaction-call">Call</button>
+        <button class="btn preaction-btn preaction-fold" id="preaction-fold">Fold</button>
+      </div>
+    </div>
+
     <!-- Start / Waiting Controls -->
     <div class="waiting-controls" id="waiting-controls" style="display:none;">
       <button class="btn btn-primary" id="start-btn">Deal Cards</button>
@@ -303,6 +313,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/sounds.js"></script>
   <script src="/js/card-renderer.js"></script>
   <script src="/js/table-renderer.js"></script>
   <script src="/js/controls.js"></script>
