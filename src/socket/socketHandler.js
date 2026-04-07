@@ -139,7 +139,7 @@ function setupSocketHandlers(io, lobbyManager) {
       game.removePendingJoin(data.name);
 
       // Notify the approved player
-      var approvedSocket = io.sockets.connected[pending.socketId];
+      var approvedSocket = io.sockets.sockets.get(pending.socketId);
       if (approvedSocket) {
         approvedSocket.emit('join-approved', {
           roomCode: currentRoom,
@@ -162,7 +162,7 @@ function setupSocketHandlers(io, lobbyManager) {
       game.removePendingJoin(data.name);
 
       // Notify the denied player
-      var deniedSocket = io.sockets.connected[pending.socketId];
+      var deniedSocket = io.sockets.sockets.get(pending.socketId);
       if (deniedSocket) {
         deniedSocket.emit('join-denied', { message: 'The host denied your request to join.' });
       }
@@ -527,7 +527,7 @@ function setupSocketHandlers(io, lobbyManager) {
       for (var i = 0; i < game.players.length; i++) {
         if (game.players[i].name === data.playerName) {
           var kicked = game.players[i];
-          var kickedSocket = io.sockets.connected[kicked.id];
+          var kickedSocket = io.sockets.sockets.get(kicked.id);
 
           // Record buy-out in ledger before removing
           game.recordLedgerEvent(kicked.name, 'buy-out', kicked.chips);
@@ -758,21 +758,19 @@ function setupSocketHandlers(io, lobbyManager) {
     }
 
     function broadcastState(game, roomCode) {
-      var sockets = io.sockets.adapter.rooms[roomCode];
+      var sockets = io.sockets.adapter.rooms.get(roomCode);
       if (!sockets) return;
 
-      var socketIds = Object.keys(sockets.sockets || sockets);
-      for (var i = 0; i < socketIds.length; i++) {
-        var sid = socketIds[i];
-        var s = io.sockets.connected[sid];
+      sockets.forEach(function(sid) {
+        var s = io.sockets.sockets.get(sid);
         if (s) {
           s.emit('game-state', game.getStateForPlayer(sid));
         }
-      }
+      });
     }
 
     function isSocketConnected(ioRef, socketId) {
-      return !!(ioRef.sockets.connected[socketId]);
+      return ioRef.sockets.sockets.has(socketId);
     }
   });
 }

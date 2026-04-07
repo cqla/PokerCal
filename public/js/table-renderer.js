@@ -201,7 +201,7 @@ var TableRenderer = (function() {
         // Empty seat
         var emptyDiv = document.createElement('div');
         emptyDiv.className = 'seat-empty';
-        emptyDiv.textContent = 'Seat ' + (s + 1);
+        emptyDiv.textContent = '+';
 
         (function(seatIdx) {
           emptyDiv.addEventListener('click', function() {
@@ -362,7 +362,7 @@ var TableRenderer = (function() {
     document.getElementById('room-code').textContent = state.roomCode;
     var modeLabel = state.gameMode === 'plo5' ? 'PLO5' : 'NLH';
     document.getElementById('blind-info').textContent =
-      modeLabel + ' | Blinds: ' + state.settings.smallBlind + '/' + state.settings.bigBlind;
+      modeLabel + ' ' + state.settings.smallBlind + '/' + state.settings.bigBlind;
 
     // Host badge
     var hostBadge = document.getElementById('host-badge');

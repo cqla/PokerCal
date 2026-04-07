@@ -1,13 +1,18 @@
 var express = require('express');
 var http = require('http');
-var socketIO = require('socket.io');
+var { Server } = require('socket.io');
 var path = require('path');
 var LobbyManager = require('./src/lobby/LobbyManager');
 var setupSocketHandlers = require('./src/socket/socketHandler');
 
 var app = express();
 var server = http.createServer(app);
-var io = socketIO(server);
+var io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 var lobbyManager = new LobbyManager();
 
 // Serve static files

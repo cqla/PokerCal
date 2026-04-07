@@ -8,20 +8,21 @@
   <link rel="stylesheet" href="/css/table.css">
   <link rel="stylesheet" href="/css/cards.css">
 </head>
-<body>
+<body class="game-page">
   <div class="game-container">
     <!-- Top Bar -->
     <div class="top-bar">
       <div class="top-bar-left">
         <a href="/" class="logo-sm">PokerCal</a>
-        <span class="room-code" id="room-code"></span>
-        <button class="btn btn-sm copy-btn" id="copy-code-btn" title="Copy room code">Copy</button>
+        <span class="host-badge" id="host-badge" style="display:none;">HOST</span>
       </div>
       <div class="top-bar-right">
         <span class="blind-info" id="blind-info"></span>
-        <span class="host-badge" id="host-badge" style="display:none;">HOST</span>
-        <button class="btn btn-sm btn-mute" id="mute-btn" title="Toggle sound">Sound: ON</button>
-        <button class="btn btn-sm btn-settings" id="settings-btn">Settings</button>
+        <button class="btn btn-sm btn-icon host-pause-topbar" id="pause-btn" style="display:none;" title="Pause">&#9208;</button>
+        <button class="btn btn-sm btn-icon host-resume-topbar" id="resume-btn" style="display:none;" title="Resume">&#9654;</button>
+        <button class="btn btn-sm btn-icon host-stop-topbar" id="stop-btn" style="display:none;" title="Stop">&#9632;</button>
+        <button class="btn btn-sm btn-mute" id="mute-btn" title="Toggle sound">&#128264;</button>
+        <button class="btn btn-sm btn-settings" id="settings-btn" title="Settings">&#9881;</button>
       </div>
     </div>
 
@@ -43,6 +44,11 @@
     <div class="modal-overlay" id="settings-modal" style="display:none;">
       <div class="modal">
         <h3>Game Settings</h3>
+        <div class="room-code-row">
+          <span class="room-code-label">Room Code:</span>
+          <span class="room-code" id="room-code"></span>
+          <button class="btn btn-sm copy-btn" id="copy-code-btn" title="Copy room code">Copy</button>
+        </div>
         <div id="settings-host-section">
           <div class="form-group">
             <label>Game Mode</label>
@@ -229,27 +235,32 @@
 
     <!-- Action Controls -->
     <div class="controls-area" id="controls-area" style="display:none;">
-      <div class="bet-presets" id="bet-presets">
-        <button class="preset-btn" data-preset="min">Min</button>
-        <button class="preset-btn" data-preset="0.5">1/2 Pot</button>
-        <button class="preset-btn" data-preset="0.75">3/4 Pot</button>
-        <button class="preset-btn" data-preset="1">Pot</button>
-        <button class="preset-btn" data-preset="max">Max</button>
+      <!-- Bet panel (hidden until Bet/Raise tapped) -->
+      <div class="bet-panel" id="bet-panel" style="display:none;">
+        <div class="bet-presets" id="bet-presets">
+          <button class="preset-btn" data-preset="min">Min</button>
+          <button class="preset-btn" data-preset="0.5">½ Pot</button>
+          <button class="preset-btn" data-preset="0.75">¾ Pot</button>
+          <button class="preset-btn" data-preset="1">Pot</button>
+          <button class="preset-btn" data-preset="max">Max</button>
+        </div>
+        <div class="bet-slider-row" id="bet-slider-row">
+          <span class="slider-label slider-min" id="slider-min-label"></span>
+          <input type="range" class="bet-slider" id="bet-slider" min="0" max="1000" value="0">
+          <span class="slider-label slider-max" id="slider-max-label"></span>
+        </div>
+        <div class="bet-amount-display" id="bet-amount-display">
+          <span>Raise to: </span>
+          <input type="number" class="bet-input" id="bet-input" min="0">
+        </div>
       </div>
-      <div class="bet-slider-row" id="bet-slider-row" style="display:none;">
-        <span class="slider-label slider-min" id="slider-min-label"></span>
-        <input type="range" class="bet-slider" id="bet-slider" min="0" max="1000" value="0">
-        <span class="slider-label slider-max" id="slider-max-label"></span>
-      </div>
-      <div class="bet-amount-display" id="bet-amount-display" style="display:none;">
-        <span>Raise to: </span>
-        <input type="number" class="bet-input" id="bet-input" min="0">
-      </div>
+      <!-- Primary action buttons (always visible when it's your turn) -->
       <div class="action-buttons">
         <button class="btn action-btn fold-btn" id="fold-btn">Fold</button>
         <button class="btn action-btn check-btn" id="check-btn">Check</button>
         <button class="btn action-btn call-btn" id="call-btn" style="display:none;">Call</button>
         <button class="btn action-btn raise-btn" id="raise-btn">Raise</button>
+        <button class="btn action-btn raise-confirm-btn" id="raise-confirm-btn" style="display:none;">Raise</button>
         <button class="btn action-btn allin-btn" id="allin-btn">All In</button>
       </div>
       <div class="time-bank-row" id="time-bank-row" style="display:none;">
@@ -258,11 +269,8 @@
       </div>
     </div>
 
-    <!-- Host Controls (always visible when applicable, independent of game phase) -->
+    <!-- Host Controls (bomb pot only — pause/stop moved to top bar) -->
     <div class="host-controls" id="host-controls" style="display:none;">
-      <button class="btn btn-sm host-pause-btn" id="pause-btn" style="display:none;">Pause</button>
-      <button class="btn btn-sm host-resume-btn" id="resume-btn" style="display:none;">Resume</button>
-      <button class="btn btn-sm host-stop-btn" id="stop-btn" style="display:none;">Stop Game</button>
       <button class="btn btn-sm bomb-pot-btn" id="bomb-pot-btn" style="display:none;">Bomb Pot</button>
     </div>
 

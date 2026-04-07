@@ -1,28 +1,44 @@
 var Controls = (function() {
   var currentActions = null;
   var onAction = null;
+  var betPanelOpen = false;
 
   function init(actionCallback) {
     onAction = actionCallback;
 
     document.getElementById('fold-btn').addEventListener('click', function() {
+      closeBetPanel();
       if (onAction) onAction('fold');
     });
 
     document.getElementById('check-btn').addEventListener('click', function() {
+      closeBetPanel();
       if (onAction) onAction('check');
     });
 
     document.getElementById('call-btn').addEventListener('click', function() {
+      closeBetPanel();
       if (onAction) onAction('call');
     });
 
+    // Raise button toggles the bet panel open
     document.getElementById('raise-btn').addEventListener('click', function() {
+      if (betPanelOpen) {
+        closeBetPanel();
+      } else {
+        openBetPanel();
+      }
+    });
+
+    // Raise confirm button (inside bet panel) submits the raise
+    document.getElementById('raise-confirm-btn').addEventListener('click', function() {
       var amount = parseInt(document.getElementById('bet-input').value);
       if (onAction && amount) onAction('raise', amount);
+      closeBetPanel();
     });
 
     document.getElementById('allin-btn').addEventListener('click', function() {
+      closeBetPanel();
       if (onAction) onAction('allin');
     });
 
@@ -32,7 +48,7 @@ var Controls = (function() {
 
     slider.addEventListener('input', function() {
       input.value = slider.value;
-      updateRaiseButtonLabel();
+      updateConfirmButtonLabel();
     });
 
     input.addEventListener('input', function() {
@@ -40,7 +56,7 @@ var Controls = (function() {
       if (val < parseInt(slider.min)) val = parseInt(slider.min);
       if (val > parseInt(slider.max)) val = parseInt(slider.max);
       slider.value = val;
-      updateRaiseButtonLabel();
+      updateConfirmButtonLabel();
     });
 
     // Presets
@@ -66,7 +82,7 @@ var Controls = (function() {
 
         document.getElementById('bet-slider').value = amount;
         document.getElementById('bet-input').value = amount;
-        updateRaiseButtonLabel();
+        updateConfirmButtonLabel();
       });
     }
 
@@ -78,6 +94,7 @@ var Controls = (function() {
       switch(e.key.toLowerCase()) {
         case 'f':
           if (onAction) onAction('fold');
+          closeBetPanel();
           break;
         case 'c':
           if (currentActions.actions.indexOf('check') >= 0) {
@@ -85,23 +102,53 @@ var Controls = (function() {
           } else if (currentActions.actions.indexOf('call') >= 0) {
             if (onAction) onAction('call');
           }
+          closeBetPanel();
           break;
         case 'r':
-          var amount = parseInt(document.getElementById('bet-input').value);
-          if (onAction && amount) onAction('raise', amount);
+          if (betPanelOpen) {
+            var amount = parseInt(document.getElementById('bet-input').value);
+            if (onAction && amount) onAction('raise', amount);
+            closeBetPanel();
+          } else {
+            openBetPanel();
+          }
           break;
         case 'a':
           if (onAction) onAction('allin');
+          closeBetPanel();
+          break;
+        case 'escape':
+          closeBetPanel();
           break;
       }
     });
   }
 
-  function updateRaiseButtonLabel() {
+  function openBetPanel() {
+    if (!currentActions || currentActions.actions.indexOf('raise') < 0) return;
+    betPanelOpen = true;
+    document.getElementById('bet-panel').style.display = 'block';
+    // Hide the raise button, show the confirm button
+    document.getElementById('raise-btn').style.display = 'none';
+    document.getElementById('raise-confirm-btn').style.display = '';
+    updateConfirmButtonLabel();
+  }
+
+  function closeBetPanel() {
+    betPanelOpen = false;
+    document.getElementById('bet-panel').style.display = 'none';
+    // Show raise button, hide confirm
+    if (currentActions && currentActions.actions.indexOf('raise') >= 0) {
+      document.getElementById('raise-btn').style.display = '';
+    }
+    document.getElementById('raise-confirm-btn').style.display = 'none';
+  }
+
+  function updateConfirmButtonLabel() {
     var input = document.getElementById('bet-input');
-    var raiseBtn = document.getElementById('raise-btn');
+    var confirmBtn = document.getElementById('raise-confirm-btn');
     var val = parseInt(input.value) || 0;
-    raiseBtn.textContent = 'Raise ' + TableRenderer.formatChips(val);
+    confirmBtn.textContent = 'Raise ' + TableRenderer.formatChips(val);
   }
 
   function show(validActions) {
@@ -110,16 +157,17 @@ var Controls = (function() {
     var checkBtn = document.getElementById('check-btn');
     var callBtn = document.getElementById('call-btn');
     var raiseBtn = document.getElementById('raise-btn');
-    var sliderRow = document.getElementById('bet-slider-row');
-    var presetsRow = document.getElementById('bet-presets');
-    var amountDisplay = document.getElementById('bet-amount-display');
 
     if (!validActions) {
       area.style.display = 'none';
+      closeBetPanel();
       return;
     }
 
     area.style.display = 'block';
+
+    // Always start with bet panel closed
+    closeBetPanel();
 
     // Check vs Call
     if (validActions.actions.indexOf('check') >= 0) {
@@ -131,13 +179,12 @@ var Controls = (function() {
       callBtn.textContent = 'Call ' + TableRenderer.formatChips(validActions.toCall);
     }
 
-    // Raise slider
+    // Raise availability
     if (validActions.actions.indexOf('raise') >= 0) {
       raiseBtn.style.display = '';
-      sliderRow.style.display = 'flex';
-      presetsRow.style.display = 'flex';
-      amountDisplay.style.display = 'flex';
+      raiseBtn.textContent = 'Bet';
 
+      // Setup slider values (ready for when panel opens)
       var slider = document.getElementById('bet-slider');
       var input = document.getElementById('bet-input');
 
@@ -148,22 +195,19 @@ var Controls = (function() {
       input.max = validActions.maxRaise;
       input.value = validActions.minRaise;
 
-      // Update labels
       document.getElementById('slider-min-label').textContent = TableRenderer.formatChips(validActions.minRaise);
       document.getElementById('slider-max-label').textContent = TableRenderer.formatChips(validActions.maxRaise);
-
-      updateRaiseButtonLabel();
     } else {
       raiseBtn.style.display = 'none';
-      sliderRow.style.display = 'none';
-      presetsRow.style.display = 'none';
-      amountDisplay.style.display = 'none';
     }
   }
 
   function hide() {
     currentActions = null;
+    betPanelOpen = false;
     document.getElementById('controls-area').style.display = 'none';
+    document.getElementById('bet-panel').style.display = 'none';
+    document.getElementById('raise-confirm-btn').style.display = 'none';
   }
 
   function showWaiting(canStart, canRebuy, canCashOut) {

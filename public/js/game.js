@@ -215,8 +215,14 @@
     addSystemMessage('Disconnected from server. Trying to reconnect...');
   });
 
-  socket.on('reconnect', function() {
-    socket.emit('join-room', { roomCode: roomCode, playerName: playerName });
+  // Socket.IO 4.x: 'connect' fires on reconnection too
+  var hasConnectedOnce = false;
+  socket.on('connect', function() {
+    if (hasConnectedOnce) {
+      // This is a reconnection
+      socket.emit('join-room', { roomCode: roomCode, playerName: playerName });
+    }
+    hasConnectedOnce = true;
   });
 
   // ==================== Timer Countdown ====================
@@ -388,22 +394,23 @@
         var canRebuy = myPlayer && myPlayer.chips <= 0;
         var canCashOut = myPlayer && myPlayer.chips > 0;
         // Show cards button if the hand just ended and player has hole cards
-        var canShowCards = myPlayer && myPlayer.holeCards && myPlayer.holeCards.length === 0 && state.lastHandResults;
+        var canShowCards = myPlayer && myPlayer.holeCards && myPlayer.holeCards.length > 0 && state.lastHandResults;
         Controls.showWaiting(canStart, canRebuy, canCashOut);
       } else {
         Controls.hideWaiting();
       }
     }
 
-    // Show Cards button visibility
+    // Show Cards button visibility — show when hand ended and player hasn't already shown
     var showCardsBtn = document.getElementById('show-cards-btn');
-    if (state.phase === 'waiting' && state.lastHandResults && myPlayer && state.handNumber > 0) {
+    var cardsAlreadyVisible = myPlayer && (!myPlayer.isFolded || myPlayer.showCards);
+    if (state.phase === 'waiting' && state.lastHandResults && myPlayer && state.handNumber > 0 && !cardsAlreadyVisible) {
       showCardsBtn.style.display = '';
     } else {
       showCardsBtn.style.display = 'none';
     }
 
-    // Host controls — always visible container, independent of waiting-controls
+    // Host controls — pause/stop/resume in top bar, bomb pot in bottom bar
     var hostControls = document.getElementById('host-controls');
     var pauseBtn = document.getElementById('pause-btn');
     var resumeBtn = document.getElementById('resume-btn');
@@ -411,12 +418,10 @@
     var bombPotBtn = document.getElementById('bomb-pot-btn');
 
     if (state.isHost && state.handNumber > 0) {
-      hostControls.style.display = 'flex';
-      pauseBtn.style.display = state.isPaused ? 'none' : '';
-      resumeBtn.style.display = state.isPaused ? '' : 'none';
-      stopBtn.style.display = state.isPaused ? 'none' : '';
+      pauseBtn.style.display = state.isPaused ? 'none' : 'flex';
+      resumeBtn.style.display = state.isPaused ? 'flex' : 'none';
+      stopBtn.style.display = state.isPaused ? 'none' : 'flex';
     } else {
-      hostControls.style.display = 'none';
       pauseBtn.style.display = 'none';
       resumeBtn.style.display = 'none';
       stopBtn.style.display = 'none';
@@ -636,12 +641,16 @@
   // Mute toggle
   document.getElementById('mute-btn').addEventListener('click', function() {
     var isMuted = Sounds.toggleMute();
-    this.textContent = isMuted ? 'Sound: OFF' : 'Sound: ON';
+    this.textContent = isMuted ? '\uD83D\uDD07' : '\uD83D\uDD0A';
+    this.title = isMuted ? 'Unmute' : 'Mute';
   });
   // Set initial mute button state
   (function() {
     var muteBtn = document.getElementById('mute-btn');
-    if (Sounds.isMuted()) muteBtn.textContent = 'Sound: OFF';
+    if (Sounds.isMuted()) {
+      muteBtn.textContent = '\uD83D\uDD07';
+      muteBtn.title = 'Unmute';
+    }
   })();
 
   // Copy room code

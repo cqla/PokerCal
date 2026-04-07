@@ -39,7 +39,7 @@ var Chat = (function() {
 
     // Panel toggle button (shows panel again - works on both desktop and mobile)
     toggleBtn.addEventListener('click', function() {
-      var isMobile = window.innerWidth <= 700;
+      var isMobile = window.innerWidth < 768;
       if (isMobile) {
         // Mobile: toggle open/close
         if (panel.classList.contains('mobile-open')) {

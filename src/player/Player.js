@@ -59,7 +59,8 @@ Player.prototype.toPublicJSON = function() {
     isFolded: this.isFolded,
     hasCards: this.holeCards.length > 0,
     lastAction: this.lastAction,
-    timeBank: this.timeBank
+    timeBank: this.timeBank,
+    showCards: !!this.showCards
   };
 };
 

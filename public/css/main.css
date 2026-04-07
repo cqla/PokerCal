@@ -1,11 +1,11 @@
 :root {
-  --bg-primary: #0b1120;
-  --bg-secondary: #111a2e;
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
   --bg-card: #0f1d35;
-  --bg-table: #2d6a4f;
-  --bg-table-felt: #1b4332;
-  --bg-table-border: #40916c;
-  --text-primary: #e0e6f0;
+  --bg-table: #1a5c3a;
+  --bg-table-felt: #145230;
+  --bg-table-border: #2d7a4f;
+  --text-primary: #e8ecf4;
   --text-secondary: #8892a8;
   --text-muted: #505870;
   --accent-primary: #e94560;
@@ -13,48 +13,44 @@
   --accent-gold: #f0c040;
   --accent-green: #34d399;
   --accent-cyan: #22d3ee;
-  --card-red: #e63946;
-  --card-black: #1d1d2b;
+  --card-red: #dc2626;
+  --card-black: #1a1a2e;
   --success: #34d399;
   --warning: #f0c040;
   --danger: #ef4444;
   --border-color: #1e293b;
-  --border-glow: rgba(124, 58, 237, 0.3);
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --radius: 16px;
-  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-sm: 8px;
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
-  min-height: 100vh;
-  overflow-x: hidden;
+  min-height: 100%;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
-/* Subtle geometric background pattern */
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    linear-gradient(135deg, rgba(124, 58, 237, 0.03) 25%, transparent 25%),
-    linear-gradient(225deg, rgba(233, 69, 96, 0.03) 25%, transparent 25%),
-    linear-gradient(315deg, rgba(124, 58, 237, 0.03) 25%, transparent 25%),
-    linear-gradient(45deg, rgba(233, 69, 96, 0.03) 25%, transparent 25%);
-  background-size: 200px 200px;
-  pointer-events: none;
-  z-index: 0;
+/* Game page: lock viewport */
+body.game-page {
+  height: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button {
@@ -63,20 +59,21 @@ button {
   outline: none;
   font-family: inherit;
   font-size: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
-input {
+input, select {
   font-family: inherit;
-  font-size: inherit;
+  font-size: 16px; /* prevent iOS zoom */
   outline: none;
 }
 
 .btn {
-  padding: 12px 24px;
+  padding: 10px 20px;
   border-radius: var(--radius-sm);
   font-weight: 600;
-  font-size: 16px;
-  transition: all 0.2s;
+  font-size: 14px;
+  transition: all 0.15s;
   width: 100%;
 }
 
@@ -85,10 +82,8 @@ input {
   color: white;
 }
 
-.btn-primary:hover {
-  background: linear-gradient(135deg, #d63050, #c02040);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(233, 69, 96, 0.3);
+.btn-primary:active {
+  transform: scale(0.97);
 }
 
 .btn-secondary {
@@ -96,38 +91,17 @@ input {
   color: white;
 }
 
-.btn-secondary:hover {
-  background: linear-gradient(135deg, #6d28d9, #5b21b6);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
-}
-
 .btn-success {
   background: var(--accent-green);
   color: white;
 }
 
-.btn-success:hover {
-  background: #2bc48a;
-}
-
 .btn-sm {
-  padding: 8px 16px;
-  font-size: 14px;
+  padding: 6px 14px;
+  font-size: 13px;
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
-  transform: none;
-}
-
-.error-message {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  text-align: center;
-  margin-top: 16px;
 }
