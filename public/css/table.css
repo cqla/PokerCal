@@ -7,8 +7,15 @@
   width: 100%;
   overflow: hidden;
   position: relative;
-  padding-bottom: 56px; /* Reserve space for fixed bottom controls */
 }
+
+/* When seated: reserve extra space at the bottom for the POV me-seat + controls */
+body.is-seated .game-container {
+  padding-top: 8px;
+  padding-bottom: 210px;
+}
+/* (me-seat sits high enough by default that the bet panel never overlaps it,
+   so nothing needs to move when the panel opens) */
 
 /* ==================== Top Bar ==================== */
 
@@ -358,6 +365,14 @@
     0 0 0 3px #3a2a0d,
     0 0 0 5px rgba(0, 0, 0, 0.3),
     0 8px 30px rgba(0, 0, 0, 0.5);
+  transition: max-height 0.3s ease, margin 0.3s ease;
+}
+
+/* When seated: shrink the felt vertically so there's space below it for POV info + bet UI.
+   Shrinking (rather than translating) keeps top seats fully on-screen. */
+body.is-seated .table-felt {
+  max-height: calc(100vh - 280px);
+  margin-top: 0;
 }
 
 /* ==================== Seat Positions ==================== */
@@ -528,7 +543,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Empty seat */
+/* Empty seat — minimal "+" circle when seated */
 .seat-empty {
   width: 36px;
   height: 36px;
@@ -545,33 +560,125 @@
   transition: all 0.2s;
 }
 
+/* Labeled empty seat — shown when user hasn't picked a seat yet */
+.seat-empty.seat-empty-labeled {
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
 .seat-empty:active {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.3);
   color: var(--text-secondary);
 }
 
-/* === Seat positions — portrait-optimized ring === */
-.seat[data-seat="0"] { top: 3%;  left: 50%; }
-.seat[data-seat="1"] { top: 12%; left: 85%; }
-.seat[data-seat="2"] { top: 40%; left: 97%; }
-.seat[data-seat="3"] { top: 68%; left: 88%; }
-.seat[data-seat="4"] { top: 84%; left: 65%; }
-.seat[data-seat="5"] { top: 84%; left: 35%; }
-.seat[data-seat="6"] { top: 68%; left: 12%; }
-.seat[data-seat="7"] { top: 40%; left: 3%;  }
-.seat[data-seat="8"] { top: 12%; left: 15%; }
+/* === Seat positions — portrait-optimized ring (keyed by visual slot) ===
+   When unseated, visual-seat == data-seat (standard positions).
+   When seated, data-visual-seat is rotated so slot 0 is me (bottom center, fixed). */
+
+/* Slot 0 = bottom-center (where me-seat goes). Slots fan out clockwise around the felt:
+   slot 1 = bottom-left (your immediate left in poker = next to act clockwise),
+   slots 2-7 wrap up around the top of the felt, slot 8 = bottom-right. */
+.seat[data-visual-seat="0"] { top: 86%; left: 50%; }
+.seat[data-visual-seat="1"] { top: 78%; left: 18%; }
+.seat[data-visual-seat="2"] { top: 48%; left: 4%;  }
+.seat[data-visual-seat="3"] { top: 22%; left: 12%; }
+.seat[data-visual-seat="4"] { top: 14%; left: 36%; }
+.seat[data-visual-seat="5"] { top: 14%; left: 64%; }
+.seat[data-visual-seat="6"] { top: 22%; left: 88%; }
+.seat[data-visual-seat="7"] { top: 48%; left: 96%; }
+.seat[data-visual-seat="8"] { top: 78%; left: 82%; }
 
 /* Bet positions (toward center) */
-.seat[data-seat="0"] .seat-bet { bottom: -18px; }
-.seat[data-seat="1"] .seat-bet { bottom: -4px; left: -30px; }
-.seat[data-seat="2"] .seat-bet { left: -36px; top: 50%; transform: translateY(-50%); }
-.seat[data-seat="3"] .seat-bet { top: -16px; left: -26px; }
-.seat[data-seat="4"] .seat-bet { top: -18px; left: -10px; }
-.seat[data-seat="5"] .seat-bet { top: -18px; right: -10px; }
-.seat[data-seat="6"] .seat-bet { top: -16px; right: -26px; }
-.seat[data-seat="7"] .seat-bet { right: -36px; top: 50%; transform: translateY(-50%); }
-.seat[data-seat="8"] .seat-bet { bottom: -4px; right: -30px; }
+.seat[data-visual-seat="0"] .seat-bet { top: -18px; }
+.seat[data-visual-seat="1"] .seat-bet { top: -16px; right: -26px; }
+.seat[data-visual-seat="2"] .seat-bet { right: -36px; top: 50%; transform: translateY(-50%); }
+.seat[data-visual-seat="3"] .seat-bet { bottom: -4px; right: -30px; }
+.seat[data-visual-seat="4"] .seat-bet { bottom: -18px; right: -10px; }
+.seat[data-visual-seat="5"] .seat-bet { bottom: -18px; left: -10px; }
+.seat[data-visual-seat="6"] .seat-bet { bottom: -4px; left: -30px; }
+.seat[data-visual-seat="7"] .seat-bet { left: -36px; top: 50%; transform: translateY(-50%); }
+.seat[data-visual-seat="8"] .seat-bet { top: -16px; left: -26px; }
+
+/* ========== POV Me-Seat (visual slot 0 when seated) ========== */
+body.is-seated .seat.me-seat {
+  position: fixed;
+  bottom: 128px;
+  left: 50%;
+  top: auto;
+  transform: translateX(-50%);
+  z-index: 14;
+  width: auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+/* Order: info (name/chips) ABOVE cards so the bet slider never covers it */
+body.is-seated .seat.me-seat .seat-info { order: 1; }
+body.is-seated .seat.me-seat .seat-cards { order: 2; }
+body.is-seated .seat.me-seat .seat-action { order: 3; }
+
+/* When seated: the me-seat shows bigger cards, small avatar, compact info */
+body.is-seated .seat.me-seat .seat-avatar {
+  display: none; /* POV: no avatar for yourself */
+}
+
+body.is-seated .seat.me-seat .seat-cards {
+  margin-bottom: 4px;
+  gap: 4px;
+}
+
+body.is-seated .seat.me-seat .seat-cards .card {
+  width: 54px;
+  height: 76px;
+  border-radius: 7px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
+}
+body.is-seated .seat.me-seat .seat-cards .card .card-rank { font-size: 22px; font-weight: 800; }
+body.is-seated .seat.me-seat .seat-cards .card .card-suit { font-size: 22px; margin-top: 1px; }
+body.is-seated .seat.me-seat .seat-cards .card + .card { margin-left: 4px; }
+
+/* Me-seat info card — bigger and more prominent */
+body.is-seated .seat.me-seat .seat-info {
+  min-width: 110px;
+  max-width: 180px;
+  padding: 4px 12px 5px;
+  border: 1.5px solid rgba(34, 211, 238, 0.5);
+  background: rgba(10, 14, 26, 0.92);
+}
+body.is-seated .seat.me-seat .seat-name { font-size: 12px; max-width: 160px; }
+body.is-seated .seat.me-seat .seat-chips { font-size: 13px; }
+
+/* Hand strength inside the me-seat info box — touches the chips line, never overlaps cards */
+body.is-seated .seat.me-seat .seat-hand-strength {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  margin-top: 2px;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Me-seat bet chip floats above the cards toward the table */
+body.is-seated .seat.me-seat .seat-bet {
+  position: absolute;
+  bottom: auto;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Non-rotated seat positions before player is seated (unseated mode) */
+/* (legacy unseated slot-0 override removed — slot 0 is bottom-center for both modes) */
+
+/* ========== Visual slot rotation rules apply via data-visual-seat above ========== */
 
 /* ==================== Chip Visuals ==================== */
 
@@ -669,19 +776,28 @@
 /* ==================== My Cards (Bottom Area) ==================== */
 
 .my-cards-area {
+  display: none !important; /* Replaced by POV me-seat */
+}
+
+/* Hand strength badge — floats just ABOVE the POV hole cards, centered, non-overlapping.
+   Me-seat bottom:76 + card height:76 = 152 from viewport bottom → badge sits at ~156. */
+.my-hand-strength {
   position: fixed;
-  bottom: 56px;
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 4px 0 2px;
-  gap: 2px;
-  background: rgba(10, 14, 26, 0.85);
-  border-top: 1px solid rgba(30, 41, 59, 0.5);
-  z-index: 14;
-  backdrop-filter: blur(4px);
+  bottom: 280px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 16;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  padding: 3px 12px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(240, 192, 64, 0.35);
+  border-radius: 10px;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  letter-spacing: 0.2px;
 }
 
 .my-cards {
@@ -689,16 +805,7 @@
   gap: 6px;
 }
 
-.my-hand-strength {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-gold);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  padding: 1px 12px;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 10px;
-  white-space: nowrap;
-}
+/* (legacy .my-hand-strength rule removed — see floating badge definition above) */
 
 /* ==================== Hand Result Overlay ==================== */
 
@@ -735,21 +842,97 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(10, 14, 26, 0.97);
-  border-top: 1px solid var(--border-color);
-  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
   z-index: 15;
-  backdrop-filter: blur(8px);
 }
 
+/* Bet panel — full-width vertical stack. Slider sits BELOW the player cards (which are
+   raised via me-seat bottom: 96px). NO backdrop blur (cards must remain crisp). */
 .bet-panel {
-  margin-bottom: 6px;
+  background: rgba(10, 14, 26, 0.97);
+  border-top: 1px solid var(--border-color);
+  padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+/* Row 1: full-width slider directly under the player cards */
+.bet-panel .bet-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+.bet-panel .bet-slider-row .bet-slider {
+  flex: 1;
+  width: 100%;
+}
+.bet-panel .bet-slider-row .slider-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Row 2: presets on left, amount input on right */
+.bet-panel-mid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bet-panel-mid .bet-presets {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.bet-panel-mid .bet-presets .preset-btn {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.9);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 7px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+.bet-panel-mid .bet-amount-display {
+  margin: 0;
+  flex-shrink: 0;
+}
+.bet-panel-mid .bet-input {
+  width: 90px;
+  padding: 7px 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--accent-gold);
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+/* Row 3: Back + Bet */
+.bet-panel-footer {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+.bet-panel-footer .action-btn { flex: 1; max-width: 200px; }
+.bet-back-btn { background: #374151; color: white; }
 
 .action-buttons {
   display: flex;
   gap: 6px;
   justify-content: center;
+  background: rgba(10, 14, 26, 0.97);
+  border-top: 1px solid var(--border-color);
+  padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
 }
 
 .action-btn {
@@ -859,18 +1042,21 @@
   text-align: center;
 }
 
-/* ==================== Turn Timer Bar ==================== */
+/* ==================== Turn Timer Bar (inside top-bar) ==================== */
+
+/* Make the top-bar a positioning context for the timer strip */
+.top-bar { position: relative; }
 
 .turn-timer-bar {
-  position: fixed;
-  bottom: 0;
+  position: absolute;
   left: 0;
   right: 0;
-  height: 20px;
-  background: rgba(10, 14, 26, 0.95);
-  border-top: 1px solid var(--border-color);
-  z-index: 14;
+  top: 100%; /* sit directly below the top-bar, not overlapping */
+  height: 6px;
+  background: rgba(10, 14, 26, 0.85);
   overflow: hidden;
+  z-index: 4;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.4);
 }
 
 .turn-timer-fill {
@@ -881,46 +1067,75 @@
   transition: width 1s linear, background 0.5s;
 }
 
-.turn-timer-text {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 100%;
-  display: flex;
+/* Crunch-time yellow flash for the last 10 seconds */
+.turn-timer-bar.low-time .turn-timer-fill {
+  background: #f7c948 !important; /* yellow */
+}
+
+/* Floating timer text inside the bar is hidden — seconds shown in top-bar instead */
+.turn-timer-text { display: none; }
+
+/* Compact seconds counter in the top-bar-left (non-invasive, non-overlapping) */
+.turn-timer-seconds {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 28px;
+  padding: 2px 7px;
+  margin-left: 6px;
   font-size: 11px;
-  font-weight: 700;
-  color: white;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  z-index: 1;
+  font-weight: 800;
+  color: var(--accent-green);
+  background: rgba(10, 14, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+}
+.turn-timer-seconds.low-time {
+  color: #f7c948;
+  border-color: rgba(247, 201, 72, 0.6);
+  animation: timeBankPulse 1.4s ease-in-out infinite;
 }
 
-/* ==================== Time Bank ==================== */
+/* ==================== Time Bank Floating Button ==================== */
 
-.time-bank-row {
+.time-bank-fab {
+  position: fixed;
+  right: 8px;
+  bottom: 144px; /* sits directly above the chat panel-toggle (bottom: 100px, 36px tall) */
+  z-index: 26;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: rgba(10, 14, 26, 0.92);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-color);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 0;
 }
-
-.time-bank-btn {
-  background: rgba(30, 41, 59, 0.8) !important;
-  color: var(--text-primary) !important;
-  padding: 7px 20px !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  width: 100% !important;
-  max-width: 400px;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 6px !important;
+.time-bank-fab.active {
+  border-color: #f7c948;
+  color: #f7c948;
+  box-shadow: 0 2px 14px rgba(247, 201, 72, 0.7);
+  animation: timeBankPulse 1.4s ease-in-out infinite;
 }
-
-.time-bank-btn:disabled { opacity: 0.35; }
-.time-bank-remaining { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+.time-bank-fab:disabled { cursor: not-allowed; }
+.time-bank-fab:active:not(:disabled) { transform: scale(0.92); }
+.time-bank-fab .time-bank-fab-label {
+  font-size: 11px;
+  line-height: 1;
+}
+@keyframes timeBankPulse {
+  0%, 100% { box-shadow: 0 2px 12px rgba(247, 201, 72, 0.5); }
+  50%      { box-shadow: 0 2px 18px rgba(247, 201, 72, 0.9); }
+}
 
 /* ==================== Host Controls ==================== */
 

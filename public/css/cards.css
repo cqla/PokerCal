@@ -53,12 +53,13 @@
 
 /* Community cards — larger for center display */
 .community-cards .card {
-  width: 38px;
-  height: 54px;
+  width: 46px;
+  height: 64px;
+  border-radius: 6px;
 }
 
-.community-cards .card .card-rank { font-size: 14px; }
-.community-cards .card .card-suit { font-size: 15px; }
+.community-cards .card .card-rank { font-size: 18px; }
+.community-cards .card .card-suit { font-size: 19px; }
 
 /* My cards (bottom display) — largest */
 .my-cards .card {

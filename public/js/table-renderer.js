@@ -76,14 +76,34 @@ var TableRenderer = (function() {
     container.innerHTML = '';
 
     var seatedPlayers = {};
+    var mySeatIndex = -1;
     for (var i = 0; i < state.players.length; i++) {
       seatedPlayers[state.players[i].seatIndex] = state.players[i];
+      if (state.players[i].isYou) mySeatIndex = state.players[i].seatIndex;
+    }
+
+    var isSeated = mySeatIndex >= 0;
+
+    // Set body class so CSS can toggle POV mode
+    if (isSeated) {
+      document.body.classList.add('is-seated');
+    } else {
+      document.body.classList.remove('is-seated');
     }
 
     for (var s = 0; s < MAX_SEATS; s++) {
       var seat = document.createElement('div');
       seat.className = 'seat';
       seat.setAttribute('data-seat', s);
+
+      // POV rotation: when seated, compute visual slot so me = slot 0 (bottom center)
+      if (isSeated) {
+        var visualSlot = (s - mySeatIndex + MAX_SEATS) % MAX_SEATS;
+        seat.setAttribute('data-visual-seat', visualSlot);
+        if (visualSlot === 0) seat.classList.add('me-seat');
+      } else {
+        seat.setAttribute('data-visual-seat', s);
+      }
 
       var player = seatedPlayers[s];
 
@@ -198,10 +218,15 @@ var TableRenderer = (function() {
           seat.appendChild(betDiv);
         }
       } else {
-        // Empty seat
+        // Empty seat — show "Seat N" label when user hasn't chosen a seat, just "+" after
         var emptyDiv = document.createElement('div');
         emptyDiv.className = 'seat-empty';
-        emptyDiv.textContent = '+';
+        if (isSeated) {
+          emptyDiv.textContent = '+';
+        } else {
+          emptyDiv.classList.add('seat-empty-labeled');
+          emptyDiv.textContent = 'Seat ' + (s + 1);
+        }
 
         (function(seatIdx) {
           emptyDiv.addEventListener('click', function() {
@@ -257,33 +282,33 @@ var TableRenderer = (function() {
   }
 
   function renderMyCards(cards, handStrength, gameMode) {
+    // POV mode: cards are rendered inline at the me-seat by renderSeats().
+    // Hand strength is injected into the me-seat's info box (under name/chips)
+    // so it never overlaps the player's chips or call amount.
     var area = document.getElementById('my-cards-area');
-    var container = document.getElementById('my-cards');
-    var strengthEl = document.getElementById('my-hand-strength');
-    container.innerHTML = '';
+    if (area) area.style.display = 'none';
 
-    // Add PLO class for smaller cards when 5 hole cards
-    if (gameMode === 'plo5') {
-      container.classList.add('plo-cards');
-    } else {
-      container.classList.remove('plo-cards');
+    // Always hide the legacy floating badge
+    var floatingEl = document.getElementById('my-hand-strength');
+    if (floatingEl) {
+      floatingEl.style.display = 'none';
+      floatingEl.textContent = '';
     }
 
-    if (cards && cards.length > 0) {
-      container.appendChild(CardRenderer.createCardGroup(cards));
-      area.style.display = 'flex';
+    var meSeatInfo = document.querySelector('.seat.me-seat .seat-info');
+    if (!meSeatInfo) return;
 
-      if (handStrength) {
-        strengthEl.textContent = handStrength;
-        strengthEl.style.display = 'block';
-      } else {
-        strengthEl.textContent = '';
-        strengthEl.style.display = 'none';
+    var inlineEl = meSeatInfo.querySelector('.seat-hand-strength');
+    if (cards && cards.length > 0 && handStrength) {
+      if (!inlineEl) {
+        inlineEl = document.createElement('div');
+        inlineEl.className = 'seat-hand-strength';
+        meSeatInfo.appendChild(inlineEl);
       }
-    } else {
-      area.style.display = 'none';
-      strengthEl.textContent = '';
-      strengthEl.style.display = 'none';
+      inlineEl.textContent = handStrength;
+      inlineEl.style.display = 'block';
+    } else if (inlineEl) {
+      inlineEl.style.display = 'none';
     }
   }
 

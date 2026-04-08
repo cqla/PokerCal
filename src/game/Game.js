@@ -190,6 +190,7 @@ Game.prototype.seatPlayer = function(id, name, seatIndex, buyIn) {
   player.seatIndex = seatIndex;
   player.chips = buyIn || this.settings.startingChips;
   player.timeBank = this.settings.timeBankTotal || 120;
+  player.pendingCashOut = false;
   this.players.push(player);
 
   this.addLog(name + ' joined the table (seat ' + (seatIndex + 1) + ')');
@@ -372,13 +373,13 @@ Game.prototype.startBombPot = function(activePlayers) {
   // Action starts left of dealer
   this.currentPlayerIndex = this.nextActivePlayerIndex(this.dealerIndex);
 
-  // Find first actable player
-  var start = this.currentPlayerIndex;
-  while (!this.players[this.currentPlayerIndex].canAct()) {
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    if (this.currentPlayerIndex === start) {
+  // Find first actable player (clockwise)
+  if (!this.players[this.currentPlayerIndex].canAct()) {
+    var next = this.nextActableIndex(this.currentPlayerIndex);
+    if (next === this.currentPlayerIndex) {
       this.advancePhase();
-      break;
+    } else {
+      this.currentPlayerIndex = next;
     }
   }
 
@@ -597,16 +598,13 @@ Game.prototype.advanceAction = function() {
     return;
   }
 
-  // Move to next player who can act
-  var startIndex = this.currentPlayerIndex;
-  do {
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    if (this.currentPlayerIndex === startIndex) {
-      // Went full circle
-      this.advancePhase();
-      return;
-    }
-  } while (!this.players[this.currentPlayerIndex].canAct());
+  // Move to next player who can act (clockwise by seat)
+  var next = this.nextActableIndex(this.currentPlayerIndex);
+  if (next === this.currentPlayerIndex) {
+    this.advancePhase();
+    return;
+  }
+  this.currentPlayerIndex = next;
 };
 
 Game.prototype.advancePhase = function() {
@@ -666,15 +664,14 @@ Game.prototype.advancePhase = function() {
   // Set first player to act (left of dealer)
   this.currentPlayerIndex = this.nextActivePlayerIndex(this.dealerIndex);
 
-  // Find first actable player
-  var start = this.currentPlayerIndex;
-  while (!this.players[this.currentPlayerIndex].canAct()) {
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
-    if (this.currentPlayerIndex === start) {
-      // No one can act
+  // Find first actable player (clockwise by seat)
+  if (!this.players[this.currentPlayerIndex].canAct()) {
+    var next = this.nextActableIndex(this.currentPlayerIndex);
+    if (next === this.currentPlayerIndex) {
       this.advancePhase();
       return;
     }
+    this.currentPlayerIndex = next;
   }
 };
 
@@ -769,6 +766,20 @@ Game.prototype.endHand = function() {
   }
 
   this.phase = PHASES.WAITING;
+  // Hand is over — clear the turn deadline so the client stops ticking the timer
+  this.turnDeadline = null;
+
+  // Apply any cash-outs that were queued mid-hand
+  for (var ci = 0; ci < this.players.length; ci++) {
+    var p = this.players[ci];
+    if (p.pendingCashOut) {
+      this.recordLedgerEvent(p.name, 'buy-out', p.chips);
+      p.chips = 0;
+      p.isSittingOut = true;
+      p.pendingCashOut = false;
+      this.addLog(p.name + ' cashed out');
+    }
+  }
 
   // Mark disconnected players as sitting out now that the hand is over
   this.sitOutDisconnectedPlayers();
@@ -1045,15 +1056,40 @@ Game.prototype.checkHandEnd = function() {
 
 // ==================== Utilities ====================
 
+// Walks players in CLOCKWISE seat order (by seatIndex), not join order.
+// Returns the array index of the next eligible player after the one at fromIndex.
+Game.prototype.nextPlayerBySeat = function(fromIndex, predicate) {
+  if (this.players.length === 0) return fromIndex;
+  var startSeat = (fromIndex >= 0 && this.players[fromIndex]) ? this.players[fromIndex].seatIndex : -1;
+  // Build seat-ordered list of array indices
+  var order = this.players.map(function(_, i) { return i; }).sort(function(a, b) {
+    return this.players[a].seatIndex - this.players[b].seatIndex;
+  }.bind(this));
+  // Find position of current in seat order
+  var pos = -1;
+  for (var i = 0; i < order.length; i++) {
+    if (this.players[order[i]].seatIndex > startSeat) { pos = i; break; }
+  }
+  if (pos === -1) pos = 0; // wrap
+  // Walk forward from pos until predicate passes
+  for (var n = 0; n < order.length; n++) {
+    var idx = order[(pos + n) % order.length];
+    if (predicate(this.players[idx])) return idx;
+  }
+  return fromIndex;
+};
+
 Game.prototype.nextActivePlayerIndex = function(fromIndex) {
-  var idx = fromIndex;
-  var count = 0;
-  do {
-    idx = (idx + 1) % this.players.length;
-    count++;
-    if (count > this.players.length) return fromIndex; // safety
-  } while (this.players[idx].isSittingOut || !this.players[idx].isConnected || this.players[idx].chips <= 0);
-  return idx;
+  return this.nextPlayerBySeat(fromIndex, function(p) {
+    return !p.isSittingOut && p.isConnected && p.chips > 0;
+  });
+};
+
+// Walks clockwise for players who canAct (used during betting rounds)
+Game.prototype.nextActableIndex = function(fromIndex) {
+  return this.nextPlayerBySeat(fromIndex, function(p) {
+    return p.canAct && p.canAct();
+  });
 };
 
 Game.prototype.getCurrentBetsTotal = function() {
@@ -1214,6 +1250,7 @@ Game.prototype.getStateForPlayer = function(playerId) {
     if (p.id === playerId) {
       state.holeCards = p.holeCards.map(function(c) { return c.toJSON(); });
       state.isYou = true;
+      state.pendingCashOut = !!p.pendingCashOut;
     }
     // Show hole cards at showdown for active players
     if (self.phase === PHASES.SHOWDOWN && !p.isFolded && p.holeCards.length > 0) {

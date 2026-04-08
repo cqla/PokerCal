@@ -243,22 +243,54 @@
       var fill = document.getElementById('turn-timer-fill');
       var text = document.getElementById('turn-timer-text');
       var bar = document.getElementById('turn-timer-bar');
+      var secEl = document.getElementById('turn-timer-seconds');
 
       if (remaining <= 0) {
         bar.style.display = 'none';
+        if (secEl) secEl.style.display = 'none';
         stopTimerCountdown();
         return;
       }
 
       bar.style.display = 'block';
       fill.style.width = pct + '%';
+      if (secEl) {
+        secEl.style.display = 'inline-flex';
+        secEl.textContent = remaining + 's';
+        if (remaining <= 10) secEl.classList.add('low-time');
+        else secEl.classList.remove('low-time');
+      }
 
-      if (pct > 50) {
-        fill.style.background = 'var(--accent-green)';
-      } else if (pct > 20) {
-        fill.style.background = 'var(--accent-gold)';
+      // Last 10 seconds → yellow "crunch time" (matches when time bank becomes available)
+      if (remaining <= 10) {
+        bar.classList.add('low-time');
+        fill.style.background = '';
       } else {
-        fill.style.background = 'var(--danger)';
+        bar.classList.remove('low-time');
+        if (pct > 50) {
+          fill.style.background = 'var(--accent-green)';
+        } else {
+          fill.style.background = 'var(--accent-gold)';
+        }
+      }
+
+      // Time Bank floating button — visible while it's your turn & you have a bank
+      var tbFab = document.getElementById('time-bank-btn');
+      if (tbFab) {
+        if (state.currentPlayerId === myId && state.myTimeBank > 0) {
+          tbFab.style.display = 'flex';
+          var lbl = document.getElementById('time-bank-fab-label');
+          if (lbl) lbl.textContent = state.myTimeBank + 's';
+          if (remaining <= 10) {
+            tbFab.classList.add('active');
+            tbFab.disabled = false;
+          } else {
+            tbFab.classList.remove('active');
+            tbFab.disabled = true;
+          }
+        } else {
+          tbFab.style.display = 'none';
+        }
       }
 
       // Find current player name
@@ -277,14 +309,6 @@
         timerWarnedAt = remaining;
       }
 
-      // Enable time bank button when ≤10 seconds remain
-      var tbBtn = document.getElementById('time-bank-btn');
-      var tbRow = document.getElementById('time-bank-row');
-      if (tbRow && tbRow.style.display !== 'none' && tbBtn) {
-        if (remaining <= 10) {
-          tbBtn.disabled = false;
-        }
-      }
     }, 250);
   }
 
@@ -293,6 +317,10 @@
       clearInterval(timerInterval);
       timerInterval = null;
     }
+    var bar = document.getElementById('turn-timer-bar');
+    if (bar) bar.style.display = 'none';
+    var secEl = document.getElementById('turn-timer-seconds');
+    if (secEl) secEl.style.display = 'none';
   }
 
   // ==================== Rendering ====================
@@ -365,46 +393,70 @@
       Controls.show(state.validActions);
       Controls.hideWaiting();
 
-      // Show time bank button — only when ≤10 seconds remain on turn timer
-      var timeBankRow = document.getElementById('time-bank-row');
-      var timeBankRemaining = document.getElementById('time-bank-remaining');
-      var timeBankBtn = document.getElementById('time-bank-btn');
-      var turnTimeLeft = state.turnTimeRemaining;
-      if (state.myTimeBank > 0 && turnTimeLeft !== null && turnTimeLeft <= 10) {
-        timeBankRow.style.display = 'flex';
-        timeBankRemaining.textContent = state.myTimeBank + 's remaining';
-        timeBankBtn.disabled = false;
-      } else if (state.myTimeBank > 0) {
-        // Have time bank but not low enough on time — show greyed out
-        timeBankRow.style.display = 'flex';
-        timeBankRemaining.textContent = state.myTimeBank + 's remaining (available at ≤10s)';
-        timeBankBtn.disabled = true;
-      } else {
-        timeBankRow.style.display = 'none';
+      // Time Bank floating button — visible whenever it's your turn and you have a bank.
+      // Greyed-out until the last 10 seconds; becomes active (yellow, clickable) at ≤10s.
+      var tbFabShow = document.getElementById('time-bank-btn');
+      if (tbFabShow) {
+        if (state.myTimeBank > 0) {
+          tbFabShow.style.display = 'flex';
+          var lbl = document.getElementById('time-bank-fab-label');
+          if (lbl) lbl.textContent = state.myTimeBank + 's';
+          var lowOnTime = state.turnTimeRemaining !== null && state.turnTimeRemaining !== undefined && state.turnTimeRemaining <= 10;
+          if (lowOnTime) {
+            tbFabShow.classList.add('active');
+            tbFabShow.disabled = false;
+          } else {
+            tbFabShow.classList.remove('active');
+            tbFabShow.disabled = true;
+          }
+        } else {
+          tbFabShow.style.display = 'none';
+        }
       }
     } else {
       Controls.hide();
-      document.getElementById('time-bank-row').style.display = 'none';
+      var tbFabHide = document.getElementById('time-bank-btn');
+      if (tbFabHide) tbFabHide.style.display = 'none';
 
       if (state.phase === 'waiting' && isSeated) {
-        var canStart = state.players.filter(function(p) {
+        // Only the host can deal cards
+        var canStart = state.isHost && state.players.filter(function(p) {
           return !p.isSittingOut && p.chips > 0;
         }).length >= 2;
 
         var canRebuy = myPlayer && myPlayer.chips <= 0;
-        var canCashOut = myPlayer && myPlayer.chips > 0;
-        // Show cards button if the hand just ended and player has hole cards
-        var canShowCards = myPlayer && myPlayer.holeCards && myPlayer.holeCards.length > 0 && state.lastHandResults;
-        Controls.showWaiting(canStart, canRebuy, canCashOut);
+        // Cash-out is no longer rendered in the main waiting bar
+        Controls.showWaiting(canStart, canRebuy, false);
       } else {
         Controls.hideWaiting();
       }
     }
 
-    // Show Cards button visibility — show when hand ended and player hasn't already shown
+    // Cash-out button (in Settings modal) — visible to any seated player with chips
+    var cashOutBtn = document.getElementById('cash-out-btn');
+    var cashOutNote = document.getElementById('cash-out-note');
+    if (cashOutBtn) {
+      if (myPlayer && myPlayer.chips > 0 && isSeated) {
+        cashOutBtn.style.display = '';
+        if (myPlayer.pendingCashOut) {
+          cashOutBtn.textContent = 'Cancel Cash Out (queued)';
+          cashOutBtn.classList.add('pending');
+          if (cashOutNote) cashOutNote.textContent = 'You will cash out automatically when this hand resolves. Tap to cancel.';
+        } else {
+          cashOutBtn.textContent = (state.phase !== 'waiting') ? 'Cash Out After Hand' : 'Cash Out';
+          cashOutBtn.classList.remove('pending');
+          if (cashOutNote) cashOutNote.textContent = 'Cash out to leave the table. If you cash out during a hand, it will take effect after the hand resolves.';
+        }
+      } else {
+        cashOutBtn.style.display = 'none';
+      }
+    }
+
+    // Show Cards button visibility — available to ANY player with hole cards at hand end
     var showCardsBtn = document.getElementById('show-cards-btn');
-    var cardsAlreadyVisible = myPlayer && (!myPlayer.isFolded || myPlayer.showCards);
-    if (state.phase === 'waiting' && state.lastHandResults && myPlayer && state.handNumber > 0 && !cardsAlreadyVisible) {
+    var hasHoleCards = myPlayer && myPlayer.holeCards && myPlayer.holeCards.length > 0;
+    var alreadyShown = myPlayer && myPlayer.showCards;
+    if (state.phase === 'waiting' && state.lastHandResults && myPlayer && state.handNumber > 0 && hasHoleCards && !alreadyShown) {
       showCardsBtn.style.display = '';
     } else {
       showCardsBtn.style.display = 'none';
@@ -552,9 +604,19 @@
     socket.emit('rebuy');
   });
 
-  // Cash out button
+  // Cash out button (lives in the Settings modal)
   document.getElementById('cash-out-btn').addEventListener('click', function() {
-    if (confirm('Cash out? Your chips will be recorded in the ledger.')) {
+    var myPlayer = lastState && lastState.players && lastState.players.find(function(p){ return p.isYou; });
+    var midHand = lastState && lastState.phase !== 'waiting';
+    if (myPlayer && myPlayer.pendingCashOut) {
+      // Toggle off — cancel the queued cash-out
+      socket.emit('cash-out');
+      return;
+    }
+    var msg = midHand
+      ? 'Cash out after this hand resolves? You will not be dealt into the next hand.'
+      : 'Cash out? Your chips will be recorded in the ledger.';
+    if (confirm(msg)) {
       socket.emit('cash-out');
     }
   });
@@ -609,7 +671,7 @@
     socket.emit('decline-run-it-twice');
   });
 
-  // Time bank button
+  // Time Bank floating button
   document.getElementById('time-bank-btn').addEventListener('click', function() {
     socket.emit('use-time-bank');
   });

@@ -15,6 +15,7 @@
       <div class="top-bar-left">
         <a href="/" class="logo-sm">PokerCal</a>
         <span class="host-badge" id="host-badge" style="display:none;">HOST</span>
+        <span class="turn-timer-seconds" id="turn-timer-seconds" style="display:none;">0s</span>
       </div>
       <div class="top-bar-right">
         <span class="blind-info" id="blind-info"></span>
@@ -24,7 +25,17 @@
         <button class="btn btn-sm btn-mute" id="mute-btn" title="Toggle sound">&#128264;</button>
         <button class="btn btn-sm btn-settings" id="settings-btn" title="Settings">&#9881;</button>
       </div>
+      <!-- Turn timer bar — sits as a thin progress strip along the bottom of the top bar -->
+      <div class="turn-timer-bar" id="turn-timer-bar" style="display:none;">
+        <div class="turn-timer-fill" id="turn-timer-fill"></div>
+        <span class="turn-timer-text" id="turn-timer-text"></span>
+      </div>
     </div>
+
+    <!-- Time Bank floating button (small circle above chat button) -->
+    <button class="time-bank-fab" id="time-bank-btn" style="display:none;" title="Use Time Bank">
+      <span class="time-bank-fab-label" id="time-bank-fab-label">+</span>
+    </button>
 
     <!-- Pending Joins Banner (Host Only) - floats top-left, not blocked by side panel -->
     <div class="pending-joins-bar" id="pending-joins-bar" style="display:none;">
@@ -157,6 +168,14 @@
             <button class="btn btn-sm" id="close-settings-viewer" style="background:var(--border-color);">Close</button>
           </div>
         </div>
+
+        <!-- Cash Out (available to all players, in settings) -->
+        <div class="settings-divider"></div>
+        <h4 class="settings-subtitle">Leave Game</h4>
+        <p class="settings-readonly-note" id="cash-out-note">Cash out to leave the table. If you cash out during a hand, it will take effect after the hand resolves.</p>
+        <div class="modal-actions">
+          <button class="btn btn-sm cash-out-btn" id="cash-out-btn" style="display:none;">Cash Out</button>
+        </div>
       </div>
     </div>
 
@@ -177,10 +196,11 @@
       </div>
     </div>
 
-    <!-- Player's own cards (larger display at bottom) -->
+    <!-- Hand strength badge (POV mode: floats above me-seat) -->
+    <div class="my-hand-strength" id="my-hand-strength" style="display:none;"></div>
+    <!-- Legacy container kept hidden for backward compatibility -->
     <div class="my-cards-area" id="my-cards-area" style="display:none;">
       <div class="my-cards" id="my-cards"></div>
-      <div class="my-hand-strength" id="my-hand-strength"></div>
     </div>
 
     <!-- Hand Result Overlay -->
@@ -227,45 +247,42 @@
       <span class="seven-two-text" id="seven-two-text"></span>
     </div>
 
-    <!-- Turn Timer Bar -->
-    <div class="turn-timer-bar" id="turn-timer-bar" style="display:none;">
-      <div class="turn-timer-fill" id="turn-timer-fill"></div>
-      <span class="turn-timer-text" id="turn-timer-text"></span>
-    </div>
-
     <!-- Action Controls -->
     <div class="controls-area" id="controls-area" style="display:none;">
-      <!-- Bet panel (hidden until Bet/Raise tapped) -->
+      <!-- Bet panel (hidden until Bet/Raise tapped) — replaces action buttons when open -->
       <div class="bet-panel" id="bet-panel" style="display:none;">
-        <div class="bet-presets" id="bet-presets">
-          <button class="preset-btn" data-preset="min">Min</button>
-          <button class="preset-btn" data-preset="0.5">½ Pot</button>
-          <button class="preset-btn" data-preset="0.75">¾ Pot</button>
-          <button class="preset-btn" data-preset="1">Pot</button>
-          <button class="preset-btn" data-preset="max">Max</button>
-        </div>
+        <!-- Row 1: full-width slider sits below the player cards -->
         <div class="bet-slider-row" id="bet-slider-row">
           <span class="slider-label slider-min" id="slider-min-label"></span>
           <input type="range" class="bet-slider" id="bet-slider" min="0" max="1000" value="0">
           <span class="slider-label slider-max" id="slider-max-label"></span>
         </div>
-        <div class="bet-amount-display" id="bet-amount-display">
-          <span>Raise to: </span>
-          <input type="number" class="bet-input" id="bet-input" min="0">
+        <!-- Row 2: presets on left, amount input on right -->
+        <div class="bet-panel-mid">
+          <div class="bet-presets">
+            <button class="preset-btn" data-preset="min">Min</button>
+            <button class="preset-btn" data-preset="0.5">½</button>
+            <button class="preset-btn" data-preset="0.75">¾</button>
+            <button class="preset-btn" data-preset="1">Pot</button>
+            <button class="preset-btn" data-preset="max">All In</button>
+          </div>
+          <div class="bet-amount-display" id="bet-amount-display">
+            <input type="number" class="bet-input" id="bet-input" min="0">
+          </div>
+        </div>
+        <!-- Row 3: Back + Bet -->
+        <div class="bet-panel-footer">
+          <button class="btn action-btn bet-back-btn" id="bet-back-btn">Back</button>
+          <button class="btn action-btn raise-confirm-btn" id="raise-confirm-btn">Bet</button>
         </div>
       </div>
       <!-- Primary action buttons (always visible when it's your turn) -->
-      <div class="action-buttons">
+      <div class="action-buttons" id="action-buttons">
         <button class="btn action-btn fold-btn" id="fold-btn">Fold</button>
         <button class="btn action-btn check-btn" id="check-btn">Check</button>
         <button class="btn action-btn call-btn" id="call-btn" style="display:none;">Call</button>
-        <button class="btn action-btn raise-btn" id="raise-btn">Raise</button>
-        <button class="btn action-btn raise-confirm-btn" id="raise-confirm-btn" style="display:none;">Raise</button>
+        <button class="btn action-btn raise-btn" id="raise-btn">Bet</button>
         <button class="btn action-btn allin-btn" id="allin-btn">All In</button>
-      </div>
-      <div class="time-bank-row" id="time-bank-row" style="display:none;">
-        <button class="btn btn-sm time-bank-btn" id="time-bank-btn">Use Time Bank</button>
-        <span class="time-bank-remaining" id="time-bank-remaining"></span>
       </div>
     </div>
 
@@ -287,7 +304,6 @@
     <div class="waiting-controls" id="waiting-controls" style="display:none;">
       <button class="btn btn-primary" id="start-btn">Deal Cards</button>
       <button class="btn btn-secondary" id="rebuy-btn" style="display:none;">Rebuy</button>
-      <button class="btn btn-sm cash-out-btn" id="cash-out-btn" style="display:none;">Cash Out</button>
       <button class="btn btn-sm show-cards-btn" id="show-cards-btn" style="display:none;">Show Cards</button>
     </div>
 

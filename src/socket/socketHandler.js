@@ -255,13 +255,17 @@ function setupSocketHandlers(io, lobbyManager) {
         return;
       }
 
-      broadcastState(game, currentRoom);
-
-      // Reset turn timer for next player
+      // Reset turn timer for the next player BEFORE broadcasting so the new
+      // turnDeadline is included in the state payload (otherwise the client
+      // would see the previous round's stale deadline).
       clearTurnTimer(game);
       if (game.phase !== 'waiting' && game.phase !== 'showdown' && game.currentPlayerIndex >= 0) {
         startTurnTimer(game);
+      } else {
+        game.turnDeadline = null;
       }
+
+      broadcastState(game, currentRoom);
 
       // Auto-start next hand after a delay if in waiting phase
       if (game.phase === 'waiting' && game.canStartHand() && game.handNumber > 0) {
@@ -576,15 +580,27 @@ function setupSocketHandlers(io, lobbyManager) {
       if (!game) return;
       var player = game.getPlayer(socket.id);
       if (!player) return;
-      if (game.phase !== 'waiting') {
-        socket.emit('error-msg', { message: 'Can only cash out between hands' });
-        return;
+
+      if (game.phase === 'waiting') {
+        // Between hands — cash out immediately
+        game.recordLedgerEvent(player.name, 'buy-out', player.chips);
+        player.chips = 0;
+        player.isSittingOut = true;
+        player.pendingCashOut = false;
+        game.addLog(player.name + ' cashed out');
+        broadcastState(game, currentRoom);
+      } else {
+        // Mid-hand — queue cash-out for after the hand resolves
+        if (player.pendingCashOut) {
+          // Toggle off
+          player.pendingCashOut = false;
+          game.addLog(player.name + ' cancelled cash out');
+        } else {
+          player.pendingCashOut = true;
+          game.addLog(player.name + ' will cash out after this hand');
+        }
+        broadcastState(game, currentRoom);
       }
-      game.recordLedgerEvent(player.name, 'buy-out', player.chips);
-      player.chips = 0;
-      player.isSittingOut = true;
-      game.addLog(player.name + ' cashed out');
-      broadcastState(game, currentRoom);
     });
 
     // ==================== Disconnect ====================
@@ -675,9 +691,12 @@ function setupSocketHandlers(io, lobbyManager) {
 
     // After auto-acting, continue the game
     function afterTurnAction(game) {
-      // Continue timer for next player
+      // Continue timer for next player — or fully clear it between hands
       if (game.phase !== 'waiting' && game.phase !== 'showdown' && game.currentPlayerIndex >= 0) {
         startTurnTimer(game);
+      } else {
+        clearTurnTimer(game);
+        game.turnDeadline = null;
       }
 
       // Auto-start next hand
