@@ -1299,8 +1299,10 @@ Game.prototype.getStateForPlayer = function(playerId) {
 
   // Time bank info for current player
   var turnTimeRemaining = null;
+  var turnTimeRemainingMs = null;
   if (this.turnDeadline && this.currentPlayerIndex >= 0) {
-    turnTimeRemaining = Math.max(0, Math.ceil((this.turnDeadline - Date.now()) / 1000));
+    turnTimeRemainingMs = Math.max(0, this.turnDeadline - Date.now());
+    turnTimeRemaining = Math.ceil(turnTimeRemainingMs / 1000);
   }
 
   // Get this player's time bank
@@ -1330,7 +1332,9 @@ Game.prototype.getStateForPlayer = function(playerId) {
     pendingJoins: playerId === this.hostId ? this.pendingJoins.map(function(p) { return { name: p.name }; }) : [],
     myHand: myHandDescription,
     turnDeadline: this.turnDeadline,
+    turnTimeRemainingMs: turnTimeRemainingMs,
     turnTimeRemaining: turnTimeRemaining,
+    serverNow: Date.now(),
     myTimeBank: myTimeBank,
     ledger: this.getLedgerSummary(),
     rabbitCards: this.rabbitCards.map(function(c) { return c.toJSON(); }),

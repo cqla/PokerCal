@@ -235,9 +235,15 @@
     }
 
     var totalSeconds = state.settings.turnTimer || 60;
+    // Use duration (turnTimeRemainingMs) rather than absolute server timestamp
+    // to be immune to client/server clock skew. Anchor a local deadline at the
+    // moment we receive this state.
+    var localDeadline = Date.now() + (typeof state.turnTimeRemainingMs === 'number'
+      ? state.turnTimeRemainingMs
+      : Math.max(0, state.turnDeadline - Date.now()));
 
-    timerInterval = setInterval(function() {
-      var remaining = Math.max(0, Math.ceil((state.turnDeadline - Date.now()) / 1000));
+    function tick() {
+      var remaining = Math.max(0, Math.ceil((localDeadline - Date.now()) / 1000));
       var pct = Math.min(100, (remaining / totalSeconds) * 100);
 
       var fill = document.getElementById('turn-timer-fill');
@@ -309,7 +315,9 @@
         timerWarnedAt = remaining;
       }
 
-    }, 250);
+    }
+    tick(); // run immediately so the counter resets to 60 without a 1s delay
+    timerInterval = setInterval(tick, 250);
   }
 
   function stopTimerCountdown() {
