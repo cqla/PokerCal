@@ -134,11 +134,6 @@
             <input type="number" id="set-bomb-pot-freq" min="0" max="50" step="1" value="5">
           </div>
 
-          <div class="modal-actions">
-            <button class="btn btn-sm btn-primary" id="save-settings">Save</button>
-            <button class="btn btn-sm" id="close-settings" style="background:var(--border-color);">Cancel</button>
-          </div>
-
           <!-- Player Chip Management -->
           <div class="settings-divider"></div>
           <h4 class="settings-subtitle">Player Chips</h4>
@@ -154,6 +149,54 @@
               <button class="btn btn-sm give-time-btn" id="give-time-30" data-amount="30">+30s</button>
               <button class="btn btn-sm give-time-btn" id="give-time-60" data-amount="60">+60s</button>
             </div>
+          </div>
+
+          <!-- Sound Settings -->
+          <div class="settings-divider"></div>
+          <h4 class="settings-subtitle">Sound Effects</h4>
+          <p class="settings-readonly-note">Changes take effect next hand.</p>
+          <div class="form-group">
+            <label>Call / Raise / All-In</label>
+            <select id="set-sound-callraise" class="sound-select">
+              <option value="default">Default</option>
+              <option value="random">Random (changes each hand)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Check / Limp</label>
+            <select id="set-sound-checklimp" class="sound-select">
+              <option value="default">Default</option>
+              <option value="random">Random (changes each hand)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fold</label>
+            <select id="set-sound-fold" class="sound-select">
+              <option value="default">Default</option>
+              <option value="random">Random (changes each hand)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Win</label>
+            <select id="set-sound-win" class="sound-select">
+              <option value="default">Default</option>
+              <option value="random">Random (changes each hand)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Special</label>
+            <select id="set-sound-special" class="sound-select">
+              <option value="default">Default</option>
+              <option value="random">Random (changes each hand)</option>
+            </select>
+          </div>
+          <button class="btn btn-sm" id="preview-sound-btn" style="background:var(--accent-gold); color:#000; margin-bottom:8px;">Preview Selected Sounds</button>
+
+          <!-- Save / Cancel (at bottom of all host settings) -->
+          <div class="settings-divider"></div>
+          <div class="modal-actions">
+            <button class="btn btn-sm btn-primary" id="save-settings">Save All Settings</button>
+            <button class="btn btn-sm" id="close-settings" style="background:var(--border-color);">Cancel</button>
           </div>
         </div>
         <div id="settings-viewer-section" style="display:none;">
@@ -188,11 +231,26 @@
         <!-- Community Cards -->
         <div class="community-area">
           <div class="community-cards" id="community-cards"></div>
+          <div class="rit-board-row" id="rit-board-row-2" style="display:none;">
+            <span class="rit-row-label">Board 2</span>
+            <div class="rit-row-cards" id="rit-cards-2"></div>
+          </div>
+          <div class="rit-results-text" id="rit-results-text" style="display:none;">
+            <div class="rit-winner-line" id="rit-winner-1"></div>
+            <div class="rit-winner-line" id="rit-winner-2"></div>
+          </div>
+          <div class="rabbit-cards-area" id="rabbit-cards-area" style="display:none;">
+            <span class="rabbit-label">🐇</span>
+            <div class="rabbit-cards" id="rabbit-cards"></div>
+          </div>
           <div class="pot-display" id="pot-display"></div>
         </div>
 
         <!-- Dealer button -->
         <div class="dealer-btn-marker" id="dealer-marker" style="display:none;">D</div>
+
+        <!-- Special Event Banner -->
+        <div class="special-event-banner" id="special-event-banner" style="display:none;"></div>
       </div>
     </div>
 
@@ -208,11 +266,7 @@
       <div class="hand-result-content" id="hand-result-content"></div>
     </div>
 
-    <!-- Rabbit Cards Display -->
-    <div class="rabbit-cards-area" id="rabbit-cards-area" style="display:none;">
-      <span class="rabbit-label">🐇 Rabbit:</span>
-      <div class="rabbit-cards" id="rabbit-cards"></div>
-    </div>
+    <!-- Rabbit cards now inside community-area on the felt -->
 
     <!-- Run It Twice Prompt -->
     <div class="run-it-twice-prompt" id="rit-prompt" style="display:none;">
@@ -228,19 +282,7 @@
       </div>
     </div>
 
-    <!-- Run It Twice Results -->
-    <div class="rit-results" id="rit-results" style="display:none;">
-      <div class="rit-board" id="rit-board-1">
-        <div class="rit-board-label">Board 1</div>
-        <div class="rit-board-cards" id="rit-cards-1"></div>
-        <div class="rit-board-winner" id="rit-winner-1"></div>
-      </div>
-      <div class="rit-board" id="rit-board-2">
-        <div class="rit-board-label">Board 2</div>
-        <div class="rit-board-cards" id="rit-cards-2"></div>
-        <div class="rit-board-winner" id="rit-winner-2"></div>
-      </div>
-    </div>
+    <!-- Run It Twice results are now inline in community-area -->
 
     <!-- 7-2 Bounty Banner -->
     <div class="seven-two-banner" id="seven-two-banner" style="display:none;">

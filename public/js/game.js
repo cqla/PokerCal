@@ -107,6 +107,9 @@
   socket.on('game-state', function(state) {
     myId = socket.id;
 
+    // Sync sound configuration from host settings
+    Sounds.updateConfig(state.settings);
+
     // Check if we became seated
     for (var i = 0; i < state.players.length; i++) {
       if (state.players[i].isYou) {
@@ -131,7 +134,9 @@
     if (state.phase === 'waiting') lastCommunityCount = 0;
 
     // Other player actions — detect via lastAction changes
-    if (lastState && state.currentPlayerId !== (lastState.currentPlayerId)) {
+    // Skip action sounds when the hand just ended (avoids overlap with win/special sounds)
+    var handJustEnded = state.phase === 'waiting' && lastState && lastState.phase !== 'waiting';
+    if (!handJustEnded && lastState && state.currentPlayerId !== (lastState.currentPlayerId)) {
       // Action happened, find who acted (the previous current player)
       if (lastState.currentPlayerIndex >= 0 && lastState.currentPlayerIndex < state.players.length) {
         var actedPlayer = state.players[lastState.currentPlayerIndex];
@@ -153,10 +158,16 @@
     }
     wasMyTurn = isMyTurn;
 
-    // Hand ended — win sound
-    if (state.phase === 'waiting' && lastState && lastState.phase !== 'waiting') {
-      if (state.lastHandResults) {
-        // Check if we won
+    // Hand ended — win sound or special event sound
+    if (handJustEnded) {
+      var playedSpecial = false;
+      // Special event sounds take priority
+      if (state.specialEvent) {
+        Sounds.special(state.specialEvent);
+        playedSpecial = true;
+      }
+      // Win sound (if no special played)
+      if (state.lastHandResults && !playedSpecial) {
         for (var r = 0; r < state.lastHandResults.length; r++) {
           var winners = state.lastHandResults[r].winners;
           for (var w = 0; w < winners.length; w++) {
@@ -168,6 +179,12 @@
           }
         }
       }
+    }
+
+    // Special event that arrives mid-waiting (e.g. bluff after show-cards)
+    if (state.phase === 'waiting' && !handJustEnded && state.specialEvent &&
+        lastState && !lastState.specialEvent) {
+      Sounds.special(state.specialEvent);
     }
 
     lastPhase = state.phase;
@@ -184,16 +201,19 @@
       executeQueuedAction(state);
     }
 
-    // Show hand results when a new hand ends
+    // Show hand results when a hand ends
     if (state.lastHandResults && state.phase === 'waiting' &&
-        lastState && lastState.phase !== 'waiting' && lastState.phase !== 'showdown') {
-      TableRenderer.renderHandResult(state.lastHandResults);
-    }
-
-    // Also show when transitioning from showdown to waiting
-    if (state.lastHandResults && state.phase === 'waiting' &&
-        lastState && lastState.phase === 'showdown') {
-      TableRenderer.renderHandResult(state.lastHandResults);
+        lastState && (lastState.phase !== 'waiting')) {
+      if (state.runItTwiceData) {
+        // Delay result overlay until RIT cards finish dealing
+        var ritNewCards = 5 - (state.runItTwiceData.existingCards || 0);
+        var ritDealTime = 600 + ritNewCards * 800 + 400 + ritNewCards * 800 + 400 + 600;
+        setTimeout(function() {
+          TableRenderer.renderHandResult(state.lastHandResults);
+        }, ritDealTime);
+      } else {
+        TableRenderer.renderHandResult(state.lastHandResults);
+      }
     }
 
     renderState(state);
@@ -396,6 +416,13 @@
     }
     lastSevenTwoWinner = state.sevenTwoWinner;
 
+    // Special event banner
+    if (state.phase === 'waiting' && state.specialEvent) {
+      TableRenderer.renderSpecialEvent(state);
+    } else if (state.phase !== 'waiting') {
+      TableRenderer.resetSpecialEvent();
+    }
+
     // Controls
     if (state.validActions && state.currentPlayerId === myId) {
       Controls.show(state.validActions);
@@ -429,7 +456,7 @@
       if (state.phase === 'waiting' && isSeated) {
         // Only the host can deal cards
         var canStart = state.isHost && state.players.filter(function(p) {
-          return !p.isSittingOut && p.chips > 0;
+          return !p.isSittingOut && p.isConnected && p.chips > 0;
         }).length >= 2;
 
         var canRebuy = myPlayer && myPlayer.chips <= 0;
@@ -604,6 +631,7 @@
 
   // Start button
   document.getElementById('start-btn').addEventListener('click', function() {
+    Sounds.stopActive(); // cut off win sound immediately
     socket.emit('start-game');
   });
 
@@ -768,7 +796,12 @@
       sevenTwoBountyAmount: document.getElementById('set-seven-two-amount').value,
       bombPotEnabled: document.getElementById('set-bomb-pot').checked,
       bombPotAnte: document.getElementById('set-bomb-pot-ante').value,
-      bombPotFrequency: document.getElementById('set-bomb-pot-freq').value
+      bombPotFrequency: document.getElementById('set-bomb-pot-freq').value,
+      soundCallRaise: document.getElementById('set-sound-callraise').value,
+      soundWin: document.getElementById('set-sound-win').value,
+      soundFold: document.getElementById('set-sound-fold').value,
+      soundCheckLimp: document.getElementById('set-sound-checklimp').value,
+      soundSpecial: document.getElementById('set-sound-special').value
     });
     document.getElementById('settings-modal').style.display = 'none';
   });
@@ -779,6 +812,137 @@
   });
   document.getElementById('set-bomb-pot').addEventListener('change', function() {
     document.getElementById('bomb-pot-options').style.display = this.checked ? '' : 'none';
+  });
+
+  // ==================== Sound dropdown population ====================
+
+  var soundDropdownsPopulated = false;
+
+  function populateSoundDropdowns(andThenSync) {
+    var sounds = Sounds.getAvailableSounds();
+    var mapping = [
+      { selectId: 'set-sound-callraise', category: 'Call-Raise' },
+      { selectId: 'set-sound-checklimp', category: 'Check-Limp' },
+      { selectId: 'set-sound-fold', category: 'Fold' },
+      { selectId: 'set-sound-win', category: 'Win' },
+      { selectId: 'set-sound-special', category: 'Special' }
+    ];
+    mapping.forEach(function(m) {
+      var sel = document.getElementById(m.selectId);
+      if (!sel) return;
+      // Remove old custom options (keep default + random)
+      while (sel.options.length > 2) sel.remove(2);
+      var files = sounds[m.category] || [];
+      files.forEach(function(f) {
+        var opt = document.createElement('option');
+        opt.value = f;
+        // Display name: strip extension, replace hyphens/underscores with spaces
+        opt.textContent = f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+        sel.appendChild(opt);
+      });
+    });
+    soundDropdownsPopulated = true;
+    if (andThenSync) syncSoundDropdownValues();
+  }
+
+  function syncSoundDropdownValues() {
+    var cfg = Sounds.getConfig();
+    var selCR = document.getElementById('set-sound-callraise');
+    var selCL = document.getElementById('set-sound-checklimp');
+    var selFo = document.getElementById('set-sound-fold');
+    var selWi = document.getElementById('set-sound-win');
+    var selSp = document.getElementById('set-sound-special');
+    if (selCR) selCR.value = cfg.soundCallRaise;
+    if (selCL) selCL.value = cfg.soundCheckLimp;
+    if (selFo) selFo.value = cfg.soundFold;
+    if (selWi) selWi.value = cfg.soundWin;
+    if (selSp) selSp.value = cfg.soundSpecial;
+  }
+
+  // Sync dropdown values when settings modal opens — ensure files are loaded first
+  document.getElementById('settings-btn').addEventListener('click', function() {
+    Sounds.fetchSoundList(function() {
+      populateSoundDropdowns(true);
+    });
+    // If already fetched, populate immediately too
+    if (soundDropdownsPopulated) {
+      populateSoundDropdowns(true);
+    }
+  });
+
+  // Preview: play sound when dropdown value changes
+  var soundDropdownMap = [
+    { selectId: 'set-sound-callraise', category: 'Call-Raise' },
+    { selectId: 'set-sound-checklimp', category: 'Check-Limp' },
+    { selectId: 'set-sound-fold', category: 'Fold' },
+    { selectId: 'set-sound-win', category: 'Win' },
+    { selectId: 'set-sound-special', category: 'Special' }
+  ];
+
+  function previewSoundFromSelect(category, val) {
+    Sounds.stopActive();
+    if (val === 'default') return; // no preview for default synth
+    var url;
+    if (val === 'random') {
+      var files = (Sounds.getAvailableSounds()[category]) || [];
+      if (files.length > 0) {
+        url = '/assets/' + category + '/' + files[Math.floor(Math.random() * files.length)];
+      }
+    } else {
+      url = '/assets/' + category + '/' + val;
+    }
+    if (url) {
+      var audio = new Audio(url);
+      audio.volume = 0.3;
+      audio.play();
+      // Track so stopActive can kill it
+      audio.addEventListener('ended', function() {
+        if (previewAudio === audio) previewAudio = null;
+      });
+      previewAudio = audio;
+    }
+  }
+
+  var previewAudio = null;
+  // Patch stopActive to also stop preview audio
+  var origStop = Sounds.stopActive;
+  Sounds.stopActive = function() {
+    origStop();
+    if (previewAudio) {
+      previewAudio.pause();
+      previewAudio.currentTime = 0;
+      previewAudio = null;
+    }
+  };
+
+  soundDropdownMap.forEach(function(m) {
+    var sel = document.getElementById(m.selectId);
+    if (sel) {
+      sel.addEventListener('change', function() {
+        previewSoundFromSelect(m.category, sel.value);
+      });
+    }
+  });
+
+  // Preview button — plays all non-default sounds in sequence
+  document.getElementById('preview-sound-btn').addEventListener('click', function() {
+    var delays = [0, 2000, 4000, 6000, 8000];
+    var idx = 0;
+    soundDropdownMap.forEach(function(m) {
+      var sel = document.getElementById(m.selectId);
+      if (sel && sel.value !== 'default') {
+        (function(cat, val, delay) {
+          setTimeout(function() {
+            previewSoundFromSelect(cat, val);
+          }, delay);
+        })(m.category, sel.value, delays[idx]);
+        idx++;
+      }
+    });
+    if (idx === 0) {
+      // All default — just play default check
+      Sounds.check();
+    }
   });
 
   // Close modal on overlay click

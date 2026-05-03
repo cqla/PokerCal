@@ -249,6 +249,7 @@ var TableRenderer = (function() {
     if (!cards || cards.length === 0) {
       container.innerHTML = '';
       lastCommunityCardCount = 0;
+      clearRunItTwice();
       return;
     }
 
@@ -256,6 +257,7 @@ var TableRenderer = (function() {
     if (cards.length < lastCommunityCardCount) {
       container.innerHTML = '';
       lastCommunityCardCount = 0;
+      clearRunItTwice();
     }
 
     // Only add cards that are new since last render
@@ -320,11 +322,8 @@ var TableRenderer = (function() {
     }
 
     var dealerPlayer = null;
-    for (var i = 0; i < state.players.length; i++) {
-      if (i === state.dealerIndex) {
-        dealerPlayer = state.players[i];
-        break;
-      }
+    if (state.dealerIndex >= 0 && state.dealerIndex < state.players.length) {
+      dealerPlayer = state.players[state.dealerIndex];
     }
 
     if (!dealerPlayer) {
@@ -332,25 +331,48 @@ var TableRenderer = (function() {
       return;
     }
 
-    var seatPositions = [
-      { top: 2, left: 50 },
-      { top: 15, left: 82 },
-      { top: 50, left: 97 },
-      { top: 85, left: 82 },
-      { top: 98, left: 50 },
-      { top: 85, left: 18 },
-      { top: 50, left: 3 },
-      { top: 15, left: 18 },
-      { top: 2, left: 30 }
+    // Find the dealer's seat element in the DOM (already POV-rotated)
+    var seatEl = document.querySelector('.seat[data-seat="' + dealerPlayer.seatIndex + '"]');
+    if (!seatEl) {
+      marker.style.display = 'none';
+      return;
+    }
+
+    // Get the visual slot to pick the right offset direction
+    var visualSlot = parseInt(seatEl.getAttribute('data-visual-seat') || '0');
+
+    // Visual-slot positions (must match the CSS)
+    var slotPositions = [
+      { top: 86, left: 50 },  // 0 bottom-center (me)
+      { top: 78, left: 18 },  // 1
+      { top: 48, left: 4 },   // 2
+      { top: 22, left: 12 },  // 3
+      { top: 14, left: 36 },  // 4
+      { top: 14, left: 64 },  // 5
+      { top: 22, left: 88 },  // 6
+      { top: 48, left: 96 },  // 7
+      { top: 78, left: 82 }   // 8
     ];
 
-    var seatIdx = dealerPlayer.seatIndex;
-    var pos = seatPositions[seatIdx];
-    var offset = DEALER_OFFSETS[seatIdx];
+    // Offsets per visual slot (push marker toward the center of the table)
+    var visualOffsets = [
+      { x: 0, y: -30 },   // 0 me — above
+      { x: 30, y: -20 },  // 1 bottom-left — right & up
+      { x: 35, y: 0 },    // 2 left — rightward
+      { x: 30, y: 20 },   // 3 top-left — right & down
+      { x: 20, y: 25 },   // 4 top — below
+      { x: -20, y: 25 },  // 5 top — below
+      { x: -30, y: 20 },  // 6 top-right — left & down
+      { x: -35, y: 0 },   // 7 right — leftward
+      { x: -30, y: -20 }  // 8 bottom-right — left & up
+    ];
+
+    var pos = slotPositions[visualSlot] || slotPositions[0];
+    var off = visualOffsets[visualSlot] || visualOffsets[0];
 
     marker.style.display = 'flex';
-    marker.style.top = 'calc(' + pos.top + '% + ' + offset.y + 'px)';
-    marker.style.left = 'calc(' + pos.left + '% + ' + offset.x + 'px)';
+    marker.style.top = 'calc(' + pos.top + '% + ' + off.y + 'px)';
+    marker.style.left = 'calc(' + pos.left + '% + ' + off.x + 'px)';
   }
 
   function renderHandResult(results) {
@@ -417,6 +439,8 @@ var TableRenderer = (function() {
       document.getElementById('set-bomb-pot-ante').value = state.settings.bombPotAnte || 0;
       document.getElementById('set-bomb-pot-freq').value = state.settings.bombPotFrequency || 0;
       document.getElementById('bomb-pot-options').style.display = state.settings.bombPotEnabled ? '' : 'none';
+      // Sound dropdown values are synced via settings-btn click handler in game.js
+      // (must populate <option> elements first before setting .value)
     } else {
       document.getElementById('settings-host-section').style.display = 'none';
       document.getElementById('settings-viewer-section').style.display = '';
@@ -661,94 +685,113 @@ var TableRenderer = (function() {
   }
 
   var ritAnimationTimer = null;
+  var ritAnimatingId = null; // tracks which RIT data we're currently animating
+
+  function clearRunItTwice() {
+    if (ritAnimationTimer) { clearTimeout(ritAnimationTimer); ritAnimationTimer = null; }
+    ritAnimatingId = null;
+
+    // Remove any board-1 label and RIT cards from main community row
+    var communityCards = document.getElementById('community-cards');
+    var ritEls = communityCards.querySelectorAll('.rit-board1-label, .rit-board1-card');
+    for (var i = 0; i < ritEls.length; i++) ritEls[i].remove();
+
+    // Clear board 2 row
+    var row2 = document.getElementById('rit-board-row-2');
+    var cards2El = document.getElementById('rit-cards-2');
+    if (row2) row2.style.display = 'none';
+    if (cards2El) cards2El.innerHTML = '';
+
+    // Clear results text
+    var resultsText = document.getElementById('rit-results-text');
+    if (resultsText) {
+      resultsText.style.display = 'none';
+      document.getElementById('rit-winner-1').textContent = '';
+      document.getElementById('rit-winner-2').textContent = '';
+    }
+  }
 
   function renderRunItTwice(state) {
-    var ritResults = document.getElementById('rit-results');
     var data = state.runItTwiceData;
 
     if (!data) {
-      ritResults.style.display = 'none';
-      if (ritAnimationTimer) { clearTimeout(ritAnimationTimer); ritAnimationTimer = null; }
+      clearRunItTwice();
       return;
     }
 
-    // If already showing, don't re-animate
-    if (ritResults.style.display === 'flex' || ritResults.style.display === 'block') return;
+    // Build a simple identity string to detect same vs new RIT data
+    var dataId = (data.board1 || []).concat(data.board2 || []).map(function(c) { return c.rank + c.suit; }).join('');
 
-    ritResults.style.display = 'flex';
-    var existingCount = data.existingCards || 0;
+    // If already animating/showing this exact data, don't re-animate
+    if (ritAnimatingId === dataId) return;
 
-    var cards1El = document.getElementById('rit-cards-1');
+    // New RIT data — clear any previous and start fresh
+    clearRunItTwice();
+    ritAnimatingId = dataId;
+
+    var communityCards = document.getElementById('community-cards');
     var cards2El = document.getElementById('rit-cards-2');
+    var row2 = document.getElementById('rit-board-row-2');
+    var resultsText = document.getElementById('rit-results-text');
     var winner1El = document.getElementById('rit-winner-1');
     var winner2El = document.getElementById('rit-winner-2');
-    cards1El.innerHTML = '';
-    cards2El.innerHTML = '';
-    winner1El.textContent = '';
-    winner2El.textContent = '';
 
-    // Show existing community cards immediately on both boards
-    var i;
-    for (i = 0; i < existingCount && i < data.board1.length; i++) {
-      cards1El.appendChild(CardRenderer.createCard(data.board1[i]));
-    }
-    for (i = 0; i < existingCount && i < data.board2.length; i++) {
-      cards2El.appendChild(CardRenderer.createCard(data.board2[i]));
-    }
-
-    // Reveal new cards one by one with dramatic delay
+    var existingCount = data.existingCards || 0;
     var newCards1 = data.board1.slice(existingCount);
     var newCards2 = data.board2.slice(existingCount);
-    var totalNew = Math.max(newCards1.length, newCards2.length);
-    var delay = 800; // ms between each card
+    var delay = 800;
 
-    function revealCard(index) {
-      if (index >= totalNew) {
-        // All cards revealed — show winners after a beat
-        ritAnimationTimer = setTimeout(function() {
-          if (data.results1 && data.results1.length > 0) {
-            var w1 = data.results1[0].winners;
-            var names1 = w1.map(function(w) { return w.name; }).join(', ');
-            var hand1 = w1[0].hand ? ' (' + w1[0].hand + ')' : '';
-            winner1El.textContent = names1 + ' wins ' + formatChips(data.results1[0].share) + hand1;
-          }
-          if (data.results2 && data.results2.length > 0) {
-            var w2 = data.results2[0].winners;
-            var names2 = w2.map(function(w) { return w.name; }).join(', ');
-            var hand2 = w2[0].hand ? ' (' + w2[0].hand + ')' : '';
-            winner2El.textContent = names2 + ' wins ' + formatChips(data.results2[0].share) + hand2;
-          }
-        }, 500);
-        return;
-      }
+    // Add "Board 1" label to the main community row before dealing new cards
+    var label1 = document.createElement('span');
+    label1.className = 'rit-board1-label';
+    label1.textContent = 'Board 1';
+    communityCards.appendChild(label1);
 
-      // Reveal card on board 1
-      if (index < newCards1.length) {
-        var card1 = CardRenderer.createCard(newCards1[index]);
-        card1.classList.add('rit-reveal');
-        card1.style.animationDelay = '0ms';
-        cards1El.appendChild(card1);
-      }
-
-      // Reveal card on board 2 slightly after board 1
-      ritAnimationTimer = setTimeout(function() {
-        if (index < newCards2.length) {
-          var card2 = CardRenderer.createCard(newCards2[index]);
-          card2.classList.add('rit-reveal');
-          card2.style.animationDelay = '0ms';
-          cards2El.appendChild(card2);
+    function revealInline(cards, container, className, onDone) {
+      var idx = 0;
+      function next() {
+        if (idx >= cards.length) {
+          ritAnimationTimer = setTimeout(onDone, 400);
+          return;
         }
-
-        // Schedule next card
-        ritAnimationTimer = setTimeout(function() {
-          revealCard(index + 1);
-        }, delay);
-      }, 400);
+        var card = CardRenderer.createCard(cards[idx], { dealing: true });
+        if (className) card.classList.add(className);
+        container.appendChild(card);
+        idx++;
+        ritAnimationTimer = setTimeout(next, delay);
+      }
+      next();
     }
 
-    // Start revealing after a short pause
+    function showResults() {
+      ritAnimationTimer = setTimeout(function() {
+        if (data.results1 && data.results1.length > 0) {
+          var w1 = data.results1[0].winners;
+          var names1 = w1.map(function(w) { return w.name; }).join(', ');
+          var hand1 = w1[0].hand ? ' (' + w1[0].hand + ')' : '';
+          winner1El.textContent = 'Board 1: ' + names1 + ' wins ' + formatChips(data.results1[0].share) + hand1;
+        }
+        if (data.results2 && data.results2.length > 0) {
+          var w2 = data.results2[0].winners;
+          var names2 = w2.map(function(w) { return w.name; }).join(', ');
+          var hand2 = w2[0].hand ? ' (' + w2[0].hand + ')' : '';
+          winner2El.textContent = 'Board 2: ' + names2 + ' wins ' + formatChips(data.results2[0].share) + hand2;
+        }
+        resultsText.style.display = 'block';
+      }, 600);
+    }
+
+    // Deal board 1 new cards into the main community row
     ritAnimationTimer = setTimeout(function() {
-      revealCard(0);
+      revealInline(newCards1, communityCards, 'rit-board1-card', function() {
+        // Now show board 2 row with existing community cards + new cards
+        row2.style.display = 'flex';
+        cards2El.innerHTML = '';
+        for (var j = 0; j < existingCount && j < data.board2.length; j++) {
+          cards2El.appendChild(CardRenderer.createCard(data.board2[j]));
+        }
+        revealInline(newCards2, cards2El, null, showResults);
+      });
     }, 600);
   }
 
@@ -786,6 +829,50 @@ var TableRenderer = (function() {
     }, 5000);
   }
 
+  var specialEventTimer = null;
+  var lastSpecialEvent = null;
+
+  function renderSpecialEvent(state) {
+    var banner = document.getElementById('special-event-banner');
+    if (!banner) return;
+
+    var event = state.specialEvent;
+
+    // Only show once per event (when transitioning to waiting)
+    if (!event || event === lastSpecialEvent) {
+      return;
+    }
+    lastSpecialEvent = event;
+
+    var labels = {
+      'bluff': 'BLUFF!',
+      'suck-out': 'SUCK OUT!',
+      'run-it-twice': 'RUN IT TWICE',
+      'no-action': 'FREE SHOWDOWN',
+      'all-in': 'ALL IN!'
+    };
+
+    var label = labels[event];
+    if (!label) return;
+
+    banner.textContent = label;
+    banner.style.display = 'block';
+    // Trigger reflow then fade in
+    banner.offsetHeight;
+    banner.classList.add('show');
+
+    if (specialEventTimer) clearTimeout(specialEventTimer);
+    specialEventTimer = setTimeout(function() {
+      banner.classList.remove('show');
+      setTimeout(function() { banner.style.display = 'none'; }, 400);
+    }, 4000);
+  }
+
+  // Reset special event tracking on new hand
+  function resetSpecialEvent() {
+    lastSpecialEvent = null;
+  }
+
   return {
     renderSeats: renderSeats,
     renderCommunityCards: renderCommunityCards,
@@ -803,6 +890,8 @@ var TableRenderer = (function() {
     renderRunItTwice: renderRunItTwice,
     renderRunItTwicePrompt: renderRunItTwicePrompt,
     renderSevenTwoBanner: renderSevenTwoBanner,
+    renderSpecialEvent: renderSpecialEvent,
+    resetSpecialEvent: resetSpecialEvent,
     formatChips: formatChips
   };
 })();

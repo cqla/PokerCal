@@ -71,9 +71,9 @@ function setupSocketHandlers(io, lobbyManager) {
 
       if (existingPlayer) {
         isApproved = true;
-        // If host socket is gone, make this reconnecting player the host
-        if (!isSocketConnected(io, game.hostId)) {
-          game.setHost(socket.id);
+        // If this reconnecting player was the host (by name), restore them
+        if (game.hostName === playerName) {
+          game.setHost(socket.id, playerName);
         }
         socket.emit('room-joined', {
           roomCode: roomCode,
@@ -99,15 +99,25 @@ function setupSocketHandlers(io, lobbyManager) {
         return;
       }
 
-      // AUTO-HOST: If no host is set, or the host socket is gone,
-      // or no players have seated yet, the first joiner becomes host.
-      // This handles the case where the creator navigates from lobby to game page
-      // (different socket connection).
-      var hostConnected = game.hostId && isSocketConnected(io, game.hostId);
-      var noPlayersYet = game.players.length === 0;
+      // AUTO-HOST: Only assign host if there is no host at all, no players yet,
+      // or the host name doesn't match any seated player (i.e. they truly left,
+      // not just briefly disconnected on mobile Safari etc.)
+      var hostStillSeated = false;
+      if (game.hostName) {
+        for (var hp = 0; hp < game.players.length; hp++) {
+          if (game.players[hp].name === game.hostName) {
+            hostStillSeated = true;
+            break;
+          }
+        }
+      }
+      // Only assign a new host if there's no host at all, or the host has truly
+      // left (not seated and socket gone). Don't steal host just because no one
+      // has taken a seat yet.
+      var needsHost = !game.hostId || (!hostStillSeated && !isSocketConnected(io, game.hostId));
 
-      if (!hostConnected || noPlayersYet) {
-        game.setHost(socket.id);
+      if (needsHost) {
+        game.setHost(socket.id, playerName);
         isApproved = true;
         socket.emit('room-joined', {
           roomCode: roomCode,
@@ -267,15 +277,23 @@ function setupSocketHandlers(io, lobbyManager) {
 
       broadcastState(game, currentRoom);
 
-      // Auto-start next hand after a delay if in waiting phase
+      // Auto-start next hand after consistent 5-second viewing window
       if (game.phase === 'waiting' && game.canStartHand() && game.handNumber > 0) {
+        var POST_HAND_VIEW_MS = 5000;
+        var autoStartDelay = POST_HAND_VIEW_MS;
+        if (game.runItTwiceData) {
+          // Wait for RIT animation to finish, then 5 seconds to view results
+          var ritNewCards = 5 - (game.runItTwiceData.existingCards || 0);
+          var ritAnimTime = 600 + ritNewCards * 800 + 400 + ritNewCards * 800 + 400 + 600;
+          autoStartDelay = ritAnimTime + POST_HAND_VIEW_MS;
+        }
         setTimeout(function() {
           if (game.phase === 'waiting' && game.canStartHand() && !game.isPaused) {
             game.startHand();
             broadcastState(game, currentRoom);
             startTurnTimer(game);
           }
-        }, 8000);
+        }, autoStartDelay);
       }
     });
 
@@ -451,6 +469,13 @@ function setupSocketHandlers(io, lobbyManager) {
       // Mark this player as wanting to show cards
       player.showCards = true;
       game.addLog(player.name + ' shows [' + player.holeCards.map(function(c) { return c.toShort(); }).join(' ') + ']');
+
+      // Bluff detection: if this is the fold-out winner showing cards
+      if (game.foldOutWinnerId === socket.id && game.checkBluff(socket.id)) {
+        game.specialEvent = 'bluff';
+        game.addLog('*** BLUFF! ***');
+      }
+
       broadcastState(game, currentRoom);
     });
 
@@ -488,6 +513,12 @@ function setupSocketHandlers(io, lobbyManager) {
       if (data.bombPotEnabled !== undefined) game.settings.bombPotEnabled = !!data.bombPotEnabled;
       if (data.bombPotAnte !== undefined) game.settings.bombPotAnte = parseInt(data.bombPotAnte) || 0;
       if (data.bombPotFrequency !== undefined) game.settings.bombPotFrequency = parseInt(data.bombPotFrequency) || 0;
+      // Sound settings
+      if (data.soundCallRaise !== undefined) game.settings.soundCallRaise = String(data.soundCallRaise);
+      if (data.soundWin !== undefined) game.settings.soundWin = String(data.soundWin);
+      if (data.soundFold !== undefined) game.settings.soundFold = String(data.soundFold);
+      if (data.soundCheckLimp !== undefined) game.settings.soundCheckLimp = String(data.soundCheckLimp);
+      if (data.soundSpecial !== undefined) game.settings.soundSpecial = String(data.soundSpecial);
       if (data.gameMode !== undefined && (data.gameMode === 'nlh' || data.gameMode === 'plo5')) {
         if (game.settings.gameMode !== data.gameMode) {
           game.settings.gameMode = data.gameMode;
@@ -699,15 +730,22 @@ function setupSocketHandlers(io, lobbyManager) {
         game.turnDeadline = null;
       }
 
-      // Auto-start next hand
+      // Auto-start next hand with consistent 5-second viewing window
       if (game.phase === 'waiting' && game.canStartHand() && game.handNumber > 0) {
+        var POST_HAND_VIEW_MS = 5000;
+        var autoDelay = POST_HAND_VIEW_MS;
+        if (game.runItTwiceData) {
+          var ritNew = 5 - (game.runItTwiceData.existingCards || 0);
+          var ritAnim = 600 + ritNew * 800 + 400 + ritNew * 800 + 400 + 600;
+          autoDelay = ritAnim + POST_HAND_VIEW_MS;
+        }
         setTimeout(function() {
           if (game.phase === 'waiting' && game.canStartHand()) {
             game.startHand();
             broadcastState(game, currentRoom);
             startTurnTimer(game);
           }
-        }, 3000);
+        }, autoDelay);
       }
     }
 

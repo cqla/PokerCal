@@ -22,6 +22,7 @@ function Game(roomCode, settings) {
   this.lastHandResults = null;
   this.autoStartTimer = null;
   this.hostId = null;
+  this.hostName = null; // persists across disconnects so host isn't lost on tab switch
   this.hostCreatorName = null;
   this.pendingJoins = []; // { id, name, socketId }
   this.ledger = {}; // { playerName: { buyIns: number, buyOuts: number, net: number, events: [] } }
@@ -31,6 +32,9 @@ function Game(roomCode, settings) {
   this.runItTwiceData = null; // { board1, board2, results1, results2, equities }
   this.runItTwicePending = false; // true when waiting for players to agree
   this.runItTwiceAgreed = {}; // { playerId: true }
+  this.specialEvent = null; // set at hand end: 'suck-out', 'run-it-twice', 'no-action', or via show-cards: 'bluff'
+  this.foldOutWinnerId = null; // player who won by fold-out (bluff detection deferred to show-cards)
+  this.hadVoluntaryBet = false; // tracks if any raise/bet beyond blinds occurred this hand
   this.isBombPot = false;
   this.bombPotCounter = 0; // counts hands for frequency-based bomb pots
   this.sevenTwoWinner = null; // name of player who won with 7-2
@@ -48,7 +52,13 @@ function Game(roomCode, settings) {
     bombPotEnabled: false,
     bombPotAnte: 0, // 0 = big blind amount
     bombPotFrequency: 5, // every N hands, 0 = manual only
-    gameMode: 'nlh' // 'nlh' = No Limit Hold'em, 'plo5' = Pot Limit Omaha 5
+    gameMode: 'nlh', // 'nlh' = No Limit Hold'em, 'plo5' = Pot Limit Omaha 5
+    // Sound settings: 'default' = synth tones, 'random' = random from folder each round, or filename
+    soundCallRaise: 'default',
+    soundWin: 'default',
+    soundFold: 'default',
+    soundCheckLimp: 'default',
+    soundSpecial: 'default'
   };
 }
 
@@ -62,8 +72,9 @@ Game.prototype.getHoleCardCount = function() {
 
 // ==================== Host Management ====================
 
-Game.prototype.setHost = function(id) {
+Game.prototype.setHost = function(id, name) {
   this.hostId = id;
+  if (name) this.hostName = name;
 };
 
 Game.prototype.isHost = function(id) {
@@ -168,9 +179,10 @@ Game.prototype.addPlayer = function(id, name) {
         clearTimeout(this.players[i].disconnectTimer);
         this.players[i].disconnectTimer = null;
       }
-      // If this player was host, update hostId to new socket
-      if (this.hostId === oldId) {
+      // If this player was host (by old socket ID or by name), restore host
+      if (this.hostId === oldId || this.hostName === name) {
         this.hostId = id;
+        this.hostName = name;
       }
       return this.players[i];
     }
@@ -273,6 +285,9 @@ Game.prototype.startHand = function() {
   this.runItTwicePending = false;
   this.runItTwiceAgreed = {};
   this.sevenTwoWinner = null;
+  this.specialEvent = null;
+  this.foldOutWinnerId = null;
+  this.hadVoluntaryBet = false;
   this.deck.reset();
 
   // Check if this should be a bomb pot
@@ -454,7 +469,10 @@ Game.prototype.getValidActions = function(playerId) {
     actions.push(ACTIONS.RAISE);
   }
 
-  actions.push(ACTIONS.ALL_IN);
+  // Only show all-in if it's distinct from calling (i.e., player has more chips than the call)
+  if (toCall < player.chips) {
+    actions.push(ACTIONS.ALL_IN);
+  }
 
   return {
     actions: actions,
@@ -532,6 +550,7 @@ Game.prototype.processAction = function(playerId, action, amount) {
       this.minRaise = Math.max(this.minRaise, raiseBy);
       this.highestBet = raiseToTotal;
       player.lastAction = 'Raise ' + raiseToTotal;
+      this.hadVoluntaryBet = true;
       this.addLog(player.name + ' raises to ' + raiseToTotal);
 
       // Reset hasActed for all other active players
@@ -563,6 +582,7 @@ Game.prototype.processAction = function(playerId, action, amount) {
       }
 
       player.lastAction = 'All-in ' + totalBet;
+      this.hadVoluntaryBet = true;
       this.addLog(player.name + ' goes all-in for ' + totalBet);
       break;
 
@@ -625,10 +645,9 @@ Game.prototype.advancePhase = function() {
 
   // If everyone is all-in (or only one can act), run out the board
   if (actablePlayers.length <= 1) {
-    // Check if run-it-twice is available
+    // Run it twice automatically when the setting is enabled
     if (this.canRunItTwice() && activePlayers.length >= 2) {
-      this.runItTwicePending = true;
-      // Don't run out the board yet - wait for player agreement
+      this.executeRunItTwice();
       return;
     }
     this.runOutBoard();
@@ -758,6 +777,57 @@ Game.prototype.endHand = function() {
     this.checkSevenTwoBounty();
   }
 
+  // ==================== Special Event Detection ====================
+  this.specialEvent = null;
+
+  if (activePlayers.length === 1) {
+    // Fold-out: bluff detection deferred until winner shows cards (see showCards method)
+    this.foldOutWinnerId = activePlayers[0].id;
+  } else if (this.runItTwiceData) {
+    // Run it twice occurred
+    this.specialEvent = 'run-it-twice';
+  } else if (!this.hadVoluntaryBet) {
+    // No voluntary betting beyond blinds — hand played out with checks only
+    this.specialEvent = 'no-action';
+  } else if (this.lastHandResults && this.lastHandResults.length > 0) {
+    // Showdown — check for suck-out (winner had low equity going in)
+    // Use Monte Carlo equity from the community cards that were dealt before showdown
+    var showdownActive = this.getActivePlayers();
+    if (showdownActive.length >= 2 && this.communityCards.length >= 3) {
+      // Evaluate each player's equity based on their hole cards vs the flop only
+      // to determine if the winner was behind and sucked out
+      var winnerIds = {};
+      for (var r = 0; r < this.lastHandResults.length; r++) {
+        for (var w = 0; w < this.lastHandResults[r].winners.length; w++) {
+          winnerIds[this.lastHandResults[r].winners[w].id] = true;
+        }
+      }
+
+      // Quick equity check: evaluate hands after flop only (first 3 community cards)
+      var flopCards = this.communityCards.slice(0, 3);
+      var isPLO = this.isPLO();
+      var handScores = [];
+      for (var i = 0; i < showdownActive.length; i++) {
+        var p = showdownActive[i];
+        var hand;
+        if (isPLO) {
+          hand = HandEvaluator.evaluateBestOmaha(p.holeCards, flopCards);
+        } else {
+          hand = HandEvaluator.evaluateBest(p.holeCards.concat(flopCards));
+        }
+        handScores.push({ id: p.id, score: hand.score, isWinner: !!winnerIds[p.id] });
+      }
+
+      // Sort by flop strength (highest first)
+      handScores.sort(function(a, b) { return b.score - a.score; });
+
+      // If the eventual winner was NOT the flop leader, it's a suck-out
+      if (handScores.length >= 2 && handScores[0].id && !handScores[0].isWinner) {
+        this.specialEvent = 'suck-out';
+      }
+    }
+  }
+
   // Remove players with no chips
   for (var i = 0; i < this.players.length; i++) {
     if (this.players[i].chips <= 0 && !this.players[i].isSittingOut) {
@@ -858,9 +928,48 @@ Game.prototype.executeRunItTwice = function() {
   this.phase = PHASES.WAITING;
   this.currentPlayerIndex = -1;
   this.lastHandResults = results1.concat(results2);
+  this.specialEvent = 'run-it-twice';
 
   // Mark disconnected players as sitting out now that the hand is over
   this.sitOutDisconnectedPlayers();
+};
+
+// Check if the fold-out winner was bluffing (didn't have the best hand)
+// Called when the winner shows cards after a fold-out
+Game.prototype.checkBluff = function(showerId) {
+  if (this.foldOutWinnerId !== showerId) return false;
+  // Need community cards to evaluate — no bluff detection preflop
+  if (this.communityCards.length === 0) return false;
+
+  var isPLO = this.isPLO();
+  var communityCards = this.communityCards;
+
+  // If rabbit cards are available, use full 5-card board for evaluation
+  var fullBoard = communityCards.map(function(c) { return c; });
+  for (var r = 0; r < this.rabbitCards.length && fullBoard.length < 5; r++) {
+    fullBoard.push(this.rabbitCards[r]);
+  }
+
+  // Evaluate all players who had hole cards this hand (including folded)
+  var bestScore = -1;
+  var bestId = null;
+  for (var i = 0; i < this.players.length; i++) {
+    var p = this.players[i];
+    if (!p.holeCards || p.holeCards.length === 0) continue;
+    var hand;
+    if (isPLO) {
+      hand = HandEvaluator.evaluateBestOmaha(p.holeCards, fullBoard);
+    } else {
+      hand = HandEvaluator.evaluateBest(p.holeCards.concat(fullBoard));
+    }
+    if (hand.score > bestScore) {
+      bestScore = hand.score;
+      bestId = p.id;
+    }
+  }
+
+  // Bluff = the shower didn't actually have the best hand
+  return bestId !== showerId;
 };
 
 Game.prototype.evaluateBoard = function(communityCards, potAmount) {
@@ -1342,6 +1451,7 @@ Game.prototype.getStateForPlayer = function(playerId) {
     runItTwicePending: this.runItTwicePending,
     canRunItTwice: this.canRunItTwice() && !this.runItTwiceAgreed[playerId],
     sevenTwoWinner: this.sevenTwoWinner,
+    specialEvent: this.specialEvent,
     isBombPot: this.isBombPot,
     gameMode: this.settings.gameMode
   };
